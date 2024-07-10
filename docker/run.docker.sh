@@ -37,7 +37,7 @@ done
 cd $PWD/../  # get to the root of the repository
 if ! $gui && nvidia; then
     docker run -it\
-           --volume $(pwd):/home/$USER/multi-purpose-representation/\
+           --volume $(pwd):/home/$USER/repo/multi-purpose-representation/\
            --env "TERM=xterm-256color"\
            --privileged\
            --network=host\
@@ -78,7 +78,7 @@ else
     fi
 
     docker run -it\
-           --volume $(pwd):/home/$USER/multi-purpose-representation/\
+           --volume $(pwd):/home/$USER/repo/multi-purpose-representation/\
            --env "TERM=xterm-256color"\
            --env "DISPLAY=$DISPLAY"\
            --volume /tmp/.X11-unix/:/tmp/.X11-unix:rw\
