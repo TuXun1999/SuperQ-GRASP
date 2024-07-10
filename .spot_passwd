@@ -1,0 +1,24 @@
+# Place this file at the root directory of robotdev.
+# This file contains Spot credentials
+if [ $SPOT_ID = "12" ]; then
+    export SPOT_USER_PASSWORD=""
+    export SPOT_WIFI_PASSWORD=""
+    export SPOT_ADMIN_PASSWORD=""
+elif [ $SPOT_ID = "2" ]; then
+    export SPOT_USER_PASSWORD=""
+    export SPOT_WIFI_PASSWORD=""
+    export SPOT_ADMIN_PASSWORD=""
+else
+    echo "Invalid SPOT ID. Either 12 (stands for 12070012) or 2 (stands for 12210002)."
+    return 1
+fi
+
+# Non-admin user:
+#   name: user
+#   password: 7rHwBQ33kW9tjwK
+
+# Environment variables used by Spot SDK examples)
+export SPOT_USER_PASSWORD="pvwmr4j08osj"
+export BOSDYN_CLIENT_PASSWORD="pvwmr4j08osj"
+export BOSDYN_CLIENT_USERNAME="admin"
+export ROBOT_IP=$SPOT_IP
