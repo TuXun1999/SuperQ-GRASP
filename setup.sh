@@ -28,9 +28,10 @@ source ${SPOT_PATH}/venv/spot/bin/activate
 
 ## Install the dependencies
 pip install empy
+sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
 # pip install pyqt5
 pip3 install pyqt5==5.12.2
-pip install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 --index-url https://download.pytorch.org/whl/cu118
+pip3 install torch torchvision torchaudio
 pip install numpy
 pip install open3d
 # scikit-image

@@ -9,7 +9,8 @@ import supervision as sv
 import sys
 import torch
 from torchvision.ops import box_convert
-
+import matplotlib
+matplotlib.use('TkAgg')
 home_addr = os.path.expanduser('~') + "/repo/multi-purpose-representation/GroundingDINO"
 IMAGE_NAME = "test1.jpg"
 CONFIG_PATH = home_addr + "/groundingdino/config/GroundingDINO_SwinT_OGC.py"

@@ -9,9 +9,11 @@ fi
 
 ## Install GroundingDINO
 git clone https://github.com/IDEA-Research/GroundingDINO.git
+cd GroundingDINO
 pip install -e .
 # Download the pretrained weights
-cd GroundingDINO
+source ./venv/spot/bin/activate
+
 mkdir weights
 cd weights
 wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
