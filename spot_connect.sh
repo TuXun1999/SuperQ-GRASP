@@ -75,15 +75,11 @@ fi
 
 # create a dedicated virtualenv for spot workspace
 if [ ! -d "${SPOT_PATH}/venv/spot" ]; then
-    cd ${SPOT_PATH}/
-    virtualenv -p python3 venv/spot
-    cd ..
+    echo "SPOT connection should be within the virtual environment"
+    return 1
 fi
 
-# activate virtualenv; Note that this is the only
-# functionality of this script if spot has been setup
-# before.
-source ${SPOT_PATH}/venv/spot/bin/activate
+# source ${SPOT_PATH}/venv/spot/bin/activate
 
 
 

@@ -9,8 +9,8 @@ from LoFTR.src.utils.plotting import make_matching_figure
 from LoFTR.src.loftr import LoFTR, default_cfg
 
 
-img0_pth = "./LoFTR/chair_2_15.png"
-img1_pth = "./LoFTR/chair_1_11.png"
+img0_pth = "./LoFTR/0010.jpg"
+img1_pth = "./LoFTR/hand_color_image_0003.jpg"
 image_pair = [img0_pth, img1_pth]
 image_type = "outdoor"
 
@@ -41,7 +41,7 @@ with torch.no_grad():
     mkpts1 = batch['mkpts1_f'].cpu().numpy()
     mconf = batch['mconf'].cpu().numpy()
 
-idx = mconf > 0.7
+idx = mconf > 0.5
 mkpts0 = mkpts0[idx]
 mkpts1 = mkpts1[idx]
 mconf = mconf[idx]

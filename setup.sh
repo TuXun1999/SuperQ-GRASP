@@ -25,7 +25,7 @@ fi
 
 # activate virtualenv; 
 source ${SPOT_PATH}/venv/spot/bin/activate
-
+pip install -U pip>=20.3
 ## Install the dependencies
 pip install empy
 sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
@@ -33,12 +33,14 @@ sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-
 pip3 install pyqt5==5.12.2
 pip3 install torch torchvision torchaudio
 pip install numpy
-pip install open3d
+pip install open3d==0.18.0
+pip install trimesh
+
 # scikit-image
 pip install -U scikit-image
+pip install mesh2sdf
 pip install pydot
 pip install graphviz
-
 
 ## Dependencies for SPOT
 pip install PySide2

@@ -1,6 +1,7 @@
 
 
-from GroundingDINO.groundingdino.util.inference import load_model, load_image, predict, annotate
+from GroundingDINO.groundingdino.util.inference import \
+    load_model, load_image, predict, annotate
 
 
 
@@ -10,9 +11,9 @@ import sys
 import torch
 from torchvision.ops import box_convert
 import matplotlib
-matplotlib.use('TkAgg')
+
 home_addr = os.path.expanduser('~') + "/repo/multi-purpose-representation/GroundingDINO"
-IMAGE_NAME = "test1.jpg"
+IMAGE_NAME = "test2.jpg"
 CONFIG_PATH = home_addr + "/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 WEIGHTS_PATH = home_addr + "/weights/groundingdino_swint_ogc.pth"
 model = load_model(CONFIG_PATH, WEIGHTS_PATH)
@@ -33,11 +34,12 @@ boxes, logits, phrases = predict(
     text_threshold=TEXT_TRESHOLD
 )
 print("====Test ===")
-
+print(boxes)
 annotated_frame = annotate(image_source=image_source, boxes=boxes, logits=logits, phrases=phrases)
 
 sv.plot_image(annotated_frame, (16, 16))
 h, w, _ = image_source.shape
+print(type(image_source))
 boxes = boxes * torch.Tensor([w, h, w, h])
 xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
 print(boxes)
