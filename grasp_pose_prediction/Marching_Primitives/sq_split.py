@@ -2,7 +2,7 @@ import numpy as np
 import sys
 import open3d as o3d
 import csv
-from Marching_Primitives.MPS import MPS, eul2rotm, parseInputArgs
+from grasp_pose_prediction.Marching_Primitives.MPS import MPS, eul2rotm, parseInputArgs
 import scipy.io
 def create_superellipsoids(e1, e2, a1, a2, a3):
     pc_shape = 50
@@ -64,7 +64,7 @@ def sq_predict_mp(csvfile_path, args = None):
     voxelGrid['disp_range'] = [-np.inf, voxelGrid['truncation']]
     voxelGrid['visualizeArclength'] = 0.01 * np.sqrt(voxelGrid['range'][1] - voxelGrid['range'][0])
 
-    # Complte extracting out the sdf
+    # Complete extracting out the sdf
     sdf = np.clip(sdf, -voxelGrid['truncation'], voxelGrid['truncation'])
 
     # marching-primitives

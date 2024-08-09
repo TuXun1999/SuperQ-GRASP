@@ -7,13 +7,12 @@ import open3d as o3d
 
 import argparse
 
-from mesh_process import *
-from image_process import *
+from utils.mesh_process import *
+from utils.image_process import *
 
 from scipy.spatial.transform import Rotation as R
 
 # Necessary Packages for LoFTR for Feature Matching
-from LoFTR.src.utils.plotting import make_matching_figure
 from LoFTR.src.loftr import LoFTR, default_cfg
 '''
 Main Program of the whole grasp pose prediction module
@@ -23,17 +22,20 @@ using Marching Primitives to split the target object into sq's
 # TODO: Add argument parser here
 def estimate_camera_pose(img_file, img_dir, images_reference_list, \
                          mesh, camera_pose_gt, \
-                         image_type = 'outdoor'):
+                         image_type = 'outdoor',\
+                            visualization = False):
     '''
     Input:
-    img_file: name of the image file, where a custom camera is placed
+    img_file: full name of the image file, where a custom camera is placed
     img_dir: directory of all reference images, as well as one json to record their poses
     images_reference_list: reference images
     mesh: mesh file to use in estimating depth
     camera_pose_gt: debugging purpose
     image_type: type of the image; used in LoFTR
+
     Output:
-    camera_pose: pose of the custom camera
+    camera_pose: pose of the custom camera (in NeRF's world)
+    nerf_scale: the scale used to convert the real-world scene into NeRF scene
     '''
 
     ######
@@ -49,7 +51,6 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
         raise ValueError("Wrong image_type is given.")
     matcher = matcher.eval().cuda()
     print("===Closest Image==")
-    
     # Find the closest reference image to the the sample image w.r.t number of matches
     image_name_reference = image_select_closest(img_file, images_reference_list, \
                                 img_dir, matcher)
@@ -63,7 +64,7 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
     ######
     ## 2D-3D Matches by Raycasting on the Scene
     # Obtain the directinal vectors of the selected points
-    ray_dir, camera_pose_ref, _, nerf_scale = \
+    ray_dir, camera_pose_ref, camera_proj_img, nerf_scale = \
         dir_point_on_image(img_dir, image_name_reference, pixel_coords_ref)
 
    
@@ -83,78 +84,52 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
     camera_pose_est = np.linalg.inv(camera_pose_est)
     print("===Estimated Camera Pose ====")
     print(camera_pose_est)
-    # Plot out the camera frame
-    if not camera_pose_gt is None:
-        camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
-        camera_frame.scale(20/64 * nerf_scale, [0, 0, 0])
-        camera_frame.transform(camera_pose)
-        camera_frame.paint_uniform_color((0, 1, 0))
 
-    camera_frame_est = o3d.geometry.TriangleMesh.create_coordinate_frame()
-    camera_frame_est.scale(20/64 * nerf_scale, [0, 0, 0])
-    camera_frame_est.transform(camera_pose_est)
-    camera_frame_est.paint_uniform_color((1, 0, 0))
+    # If the user hopes to see the visualization
+    if visualization:
+        # Plot out the camera frame
+        if not camera_pose_gt is None:
+            camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
+            camera_frame.scale(20/64, [0, 0, 0])
+            camera_frame.transform(camera_pose_gt)
+            camera_frame.paint_uniform_color((0, 1, 0))
 
-    
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pos)
-    pcd.paint_uniform_color((1, 0, 0))
+        camera_frame_est = o3d.geometry.TriangleMesh.create_coordinate_frame()
+        camera_frame_est.scale(20/64, [0, 0, 0])
+        camera_frame_est.transform(camera_pose_est)
+        camera_frame_est.paint_uniform_color((1, 0, 0))
 
-    ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
-    ball_select.scale(1/64 * nerf_scale, [0, 0, 0])
+        
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pos)
+        pcd.paint_uniform_color((1, 0, 0))
 
-    ball_select.translate((pos[0][0], pos[0][1], pos[0][2]))
-    ball_select.paint_uniform_color((1, 0, 0))
-    print("====Test Reprojected Points ==")
-    # Project all points back onto the image plane.
-    # image = cv2.imread(img_dir + img_file)
-    # (reproj_points, jacobian) = \
-    #     cv2.projectPoints(pos, rvec, tvec, camera_proj_img[:, :-1], None)
-    
-    # for p in reproj_points:
-    #     cv2.circle(image, (int(p[0][0]), int(p[0][1])), 3, (0,0,255), -1)
-    
-    # # Display image
-    # cv2.imshow("Output", image)
-    # cv2.waitKey(0)
+        ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
+        ball_select.scale(1/64, [0, 0, 0])
 
-    # rot = np.linalg.inv(camera_pose)[:, :-1]
-    # rot = rot[:-1, :]
-    # rvec2, _= cv2.Rodrigues(rot)
-    # print(rot)
-    # print(rvec2)
-    # tvec2 = np.linalg.inv(camera_pose)[0:3, 3]
+        ball_select.translate((pos[0][0], pos[0][1], pos[0][2]))
+        ball_select.paint_uniform_color((1, 0, 0))
 
-    # (reproj_points2, jacobian) = \
-    #     cv2.projectPoints(pos, rvec2, tvec2, camera_proj_img[:, :-1], None)
-    # image2 = cv2.imread(img_dir + img_file)
-    # for p2 in reproj_points2:
-    #     cv2.circle(image2, (int(p2[0][0]), int(p2[0][1])), 3, (0,0,255), -1)
-    
-    # # Display image
-    # cv2.imshow("Output2", image2)
-    # cv2.waitKey(0)
+        ##########
+        # Postlude: Plot out the Visualizations
+        ##########
+        # Create the window to display everything
+        vis= o3d.visualization.Visualizer()
+        vis.create_window()
+        vis.add_geometry(mesh)
 
-    ##########
-    # Postlude: Plot out the Visualizations
-    ##########
-    # Create the window to display everything
-    vis= o3d.visualization.Visualizer()
-    vis.create_window()
-    vis.add_geometry(mesh)
+        if not camera_pose_gt is None:
+            vis.add_geometry(camera_frame)
+        
+        vis.add_geometry(camera_frame_est)
+        vis.add_geometry(pcd)
+        vis.add_geometry(ball_select)
+        vis.run()
 
-    if not camera_pose_gt is None:
-        vis.add_geometry(camera_frame)
-    
-    vis.add_geometry(camera_frame_est)
-    vis.add_geometry(pcd)
-    vis.add_geometry(ball_select)
-    vis.run()
+        # Close all windows
+        vis.destroy_window()
 
-    # Close all windows
-    vis.destroy_window()
-
-    return camera_pose_est
+    return camera_pose_est, nerf_scale
 
 
 

@@ -423,10 +423,10 @@ def find_sq_closest(point_select, sq_transformation, norm_scale = 1, displacemen
         pos_sq_points = np.matmul(sq_rot.T, pc_tran.T)\
                     - np.matmul(sq_rot.T, sq_t)
         
-        # Directly obtain the distances and find the minimum one
+        # NOTE: Brute force: Directly obtain the distances and find the minimum one
         dist = np.min(np.linalg.norm(pos_sq - pos_sq_points, axis=0))
 
-        # Analytical approximate method
+        # NOTE: Analytical approximate method
         # x,y,z,_ = pos_sq.flatten()
         
         # # Calculate the evaluation value
@@ -442,10 +442,10 @@ def find_sq_closest(point_select, sq_transformation, norm_scale = 1, displacemen
 
         # dist = abs(1 - beta) * np.sqrt(x**2 + y**2 + z**2)
 
-        # Apply the final displacement (observed in deep learning methods)
+        # Apply the final displacement (observed in several experiments)
         sq_tran[0:3, 3] = sq_tran[0:3, 3] + displacement
         pc_tran = pc_tran + displacement
-        # Find the closest sq to the selected point
+        # Find the closest sq iteratively
         if dist < dist_min :
             dist_min = dist
             sq_closest = {}
@@ -463,12 +463,11 @@ def grasp_pose_predict_sq_closest(sq_closest, gripper_attr, norm_scale = 1, samp
     '''
     The function to predict grasp poses on the sq closest to the selected point
     Input: sq_closest: attributes of the closest sq
-    gripper_attr: attributes of the gripper (parallel gripper, currently)
+    gripper_attr: attributes of the gripper (so far, only the length of the gripper is used)
     norm_scale: scaling factor used in normalization (to restore sq into the correct scale)
     '''
     # Read the attributes of the gripper
-    if gripper_attr["Type"] == "parallel":
-        gripper_length = gripper_attr["Length"]
+    gripper_length = gripper_attr["Length"]
     
     norm = norm_scale
     # Read the parameters of the associated sq
@@ -486,26 +485,25 @@ def grasp_pose_predict_sq_closest(sq_closest, gripper_attr, norm_scale = 1, samp
     axes_length = np.array([a1_closest, a2_closest, a3_closest])
     min_idx = axes_length.argsort()[0]
     min_idx_second = axes_length.argsort()[1]
-    print(min_idx_second)
     ratio = (axes_length[min_idx_second] - axes_length[min_idx]) / axes_length[min_idx]
 
     principal_axis = 2
     if min_idx == 2: # If z is the direction of the the shortest axis in length
         grasp_poses = grasp_pose_predict_sq(a1_closest, a2_closest, epsilon2_closest, \
-                                            sample_number=sample_number, tolerance= gripper_length/2)
+                                            sample_number=sample_number, tolerance= gripper_length*0.3)
     elif min_idx == 1: # If y is the direction of the shortest axis in length
         grasp_poses = grasp_pose_predict_sq(a1_closest, a3_closest, epsilon1_closest, \
-                                            sample_number=sample_number, tolerance=gripper_length/2)
+                                            sample_number=sample_number, tolerance=gripper_length*0.3)
         principal_axis = 1
     else: # If x is the direction of the shorest axis in length
         grasp_poses = grasp_pose_predict_sq(a2_closest, a3_closest, epsilon1_closest, \
-                                            sample_number=sample_number, tolerance=gripper_length/2)
+                                            sample_number=sample_number, tolerance=gripper_length*0.3)
         principal_axis = 0
     # Transform the grasp poses to the correct positions in world frame
     grasp_poses = transform_matrix_convert(grasp_poses, principal_axis)
 
     # If the two shortest axes are close in length, we could predict more grasp poses
-    if ratio < 0.1: # If the two axes are close in length (ratio is small)
+    if ratio < 0.25: # If the two axes are close in length (ratio is small)
         principal_axis_second = 2
         if min_idx_second == 2: # If z is the direction of the the shortest axis in length
             grasp_poses_second = grasp_pose_predict_sq(a1_closest, a2_closest, epsilon2_closest, tolerance= gripper_length/2)
