@@ -292,6 +292,51 @@ def block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=None, verbose=F
         print('block_for_trajectory_cmd: timeout exceeded.')
 
 
+def move_gripper(grasp_pose_gripper, robot_state_client, command_client):
+    '''
+    Move the gripper to the desired pose, given in the local frame of HAND_frame
+    Input:
+    grasp_pose_gripper: the pose of the gripper in the current hand frame
+    robot_state_client: the state client of the robot
+    command_client: the client to send the commands
+    '''
+
+    # Transform the desired pose from the moving body frame to the odom frame.
+    robot_state = robot_state_client.get_robot_state()
+    odom_T_hand = frame_helpers.get_a_tform_b(\
+                robot_state.kinematic_state.transforms_snapshot,
+                frame_helpers.ODOM_FRAME_NAME, \
+                frame_helpers.HAND_FRAME_NAME)
+    odom_T_hand = odom_T_hand.to_matrix()
+
+    # Build the SE(3) pose of the desired hand position in the moving body frame.
+    odom_T_target = odom_T_hand@grasp_pose_gripper
+    print("===Test===")
+    print(np.linalg.det(odom_T_target))
+    odom_T_target = math_helpers.SE3Pose.from_matrix(odom_T_target)
+    
+    # duration in seconds
+    seconds = 5.0
+
+    # Create the arm command.
+    arm_command = RobotCommandBuilder.arm_pose_command(
+        odom_T_target.x, odom_T_target.y, odom_T_target.z, odom_T_target.rot.w, odom_T_target.rot.x,
+        odom_T_target.rot.y, odom_T_target.rot.z, \
+            frame_helpers.ODOM_FRAME_NAME, seconds)
+
+    # Tell the robot's body to follow the arm
+    follow_arm_command = RobotCommandBuilder.follow_arm_command()
+
+    # Combine the arm and mobility commands into one synchronized command.
+    command = RobotCommandBuilder.build_synchro_command(follow_arm_command, arm_command)
+
+    # Send the request
+    move_command_id = command_client.robot_command(command)
+    print('Moving arm to position.')
+
+    block_until_arm_arrives(command_client, move_command_id, 30.0)
+
+
 def find_chair_go(options):
     if (options.image_source != "hand_color_image"):
         print("Currently Only Support Hand Camera!")
@@ -508,10 +553,6 @@ def find_chair_go(options):
         xyxy, _ = bounding_box_predict(image_name, target)
         img, mask = get_mask_image(img, xyxy)
 
-        # Save the new masked image (input for pose estimation module)
-        data = Image.fromarray(img, 'RGBA') 
-        data.save(os.path.join(options.nerf_model, "pose_estimation_masked.png")) 
-
         # Also save the rgb image for reference
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_rgb, _ = get_mask_image(img_rgb, xyxy)
@@ -527,7 +568,7 @@ def find_chair_go(options):
         mesh_filename = os.path.join(options.nerf_model , "target_obj.obj")
         mesh = o3d.io.read_triangle_mesh(mesh_filename)
         camera_pose_est, nerf_scale = \
-                estimate_camera_pose("/pose_estimation_masked.png", options.nerf_model, \
+                estimate_camera_pose("/pose_estimation_masked_rgb.png", options.nerf_model, \
                                      images_reference_list, \
                          mesh, None, \
                          image_type = 'outdoor', visualization = options.visualization)
@@ -552,7 +593,7 @@ def find_chair_go(options):
         camera_gripper_correction = R.from_quat(\
             [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()
         camera_gripper_correction = np.vstack(\
-            (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.05]]))), np.array([0, 0, 0, 1])))
+            (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.0254]]))), np.array([0, 0, 0, 1])))
         gripper_pose_current = gripper_pose_current@camera_gripper_correction
         if options.method == "sq_split":
              # Predict the grasp poses
@@ -627,8 +668,8 @@ def find_chair_go(options):
             depth_array /= nerf_scale
 
             # Save the depth array for debugging purpose
-            depth_array_save = depth_array * (65536/2)
-            Image.fromarray(depth_array_save.astype('uint16')).save("./depth_test.png")
+            # depth_array_save = depth_array * (65536/2)
+            # Image.fromarray(depth_array_save.astype('uint16')).save("./depth_test.png")
 
             # Read the camera attributes
             fl_x = camera_intrinsics_dict["fl_x"]
@@ -697,8 +738,8 @@ def find_chair_go(options):
 
             # Evaluate the transformation between each predicted grasp pose
             # and the current gripper pose
-            rot1 = grasp_pose[np.ix_([0,1,2],[0,1,2])]
-            rot2 = gripper_pose_current[np.ix_([0,1,2],[0,1,2])]
+            rot1 = grasp_pose[:3, :3]
+            rot2 = gripper_pose_current[:3, :3]
             tran = rot2.T@rot1
 
             # Find the one with the minimum rotation
@@ -777,47 +818,53 @@ def find_chair_go(options):
         grasp_pose_gripper = np.linalg.inv(gripper_pose_current)@grasp_pose_gripper
         print(grasp_pose_gripper)
         grasp_pose_gripper[0:3, 3] = grasp_pose_gripper[0:3, 3] / nerf_scale
-        
-        # Build the SE(3) pose of the desired hand position in the moving body frame.
-        hand_T_target = math_helpers.SE3Pose.from_matrix(grasp_pose_gripper)
 
-        # Transform the desired pose from the moving body frame to the odom frame.
-        robot_state = robot_state_client.get_robot_state()
-        odom_T_hand = frame_helpers.get_a_tform_b(\
-                    robot_state.kinematic_state.transforms_snapshot,
-                    frame_helpers.ODOM_FRAME_NAME, \
-                    frame_helpers.HAND_FRAME_NAME)
-        
-        odom_T_target = odom_T_hand * hand_T_target
 
-        # duration in seconds
-        seconds = 5.0
-
-        # Create the arm command.
-        arm_command = RobotCommandBuilder.arm_pose_command(
-            odom_T_target.x, odom_T_target.y, odom_T_target.z, odom_T_target.rot.w, odom_T_target.rot.x,
-            odom_T_target.rot.y, odom_T_target.rot.z, \
-                frame_helpers.ODOM_FRAME_NAME, seconds)
-
-        # Tell the robot's body to follow the arm
-        follow_arm_command = RobotCommandBuilder.follow_arm_command()
-
-        # Combine the arm and mobility commands into one synchronized command.
-        command = RobotCommandBuilder.build_synchro_command(follow_arm_command, arm_command)
-
-        # Send the request
-        move_command_id = command_client.robot_command(command)
-        print('Moving arm to position.')
-
-        block_until_arm_arrives(command_client, move_command_id, 30.0)
+        # Command the robot to place the gripper at the desired pose
+        move_gripper(grasp_pose_gripper, robot_state_client, command_client)
         
         # Close the gripper
         robot_command = RobotCommandBuilder.claw_gripper_close_command()
         cmd_id = command_client.robot_command(robot_command)
 
+        time.sleep(1.0)
+        # Command the robot to fix up the relative transformation between
+        # its gripper and the body
+        # Transform the desired pose from the moving body frame to the odom frame.
+        robot_state = robot_state_client.get_robot_state()
+        body_T_hand = frame_helpers.get_a_tform_b(\
+                    robot_state.kinematic_state.transforms_snapshot,
+                    frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, \
+                    frame_helpers.HAND_FRAME_NAME)
+
+        # duration in seconds
+        seconds = 5.0
+
+        # Create the arm command & send it (theoretically, the robot shouldn't move)
+        arm_command = RobotCommandBuilder.arm_pose_command(
+            body_T_hand.x, body_T_hand.y, body_T_hand.z, body_T_hand.rot.w, body_T_hand.rot.x,
+            body_T_hand.rot.y, body_T_hand.rot.z, \
+                frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, seconds)
+        command_client.robot_command(arm_command)
         time.sleep(0.5)
-        # TODO: Command the robot to go back
+        # Move the robot back fro 0.5 m
+        VELOCITY_BASE_SPEED = 0.5 #[m/s]
+
+        
+        move_cmd = RobotCommandBuilder.synchro_velocity_command(\
+            v_x=-VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
+
+        cmd_id = command_client.robot_command(command=move_cmd,
+                            end_time_secs=time.time() + 1)
+    
+        # Wait until the robot reports that it is at the goal.
+        block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
+        
         input("Waiting for the user to stop")
+
+        # Release the gripper
+        robot_command = RobotCommandBuilder.claw_gripper_open_command()
+        cmd_id = command_client.robot_command(robot_command)
         return True
 
 def main(argv):

@@ -58,7 +58,7 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
     # Determine the pixel coordinates of the point matches
     pixel_coords_img, pixel_coords_ref = match_coords(img_dir + img_file, \
                                                       img_dir + image_name_reference, \
-                                matcher, th = 0.5, scale_restore=True)
+                                matcher, th = 0.5, scale_restore=True, save_fig = False)
     ######
     ## Part II: Estimate Camera pose of sampled image
     ######

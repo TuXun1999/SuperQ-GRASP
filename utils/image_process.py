@@ -197,7 +197,7 @@ def dir_point_on_image(img_dir, img_file, pixel_coords):
 ################################
 ## Part II:  Matched Features between two images
 ################################
-def match_coords(image0_name, image1_name, matcher, th = 0.7, \
+def match_coords(image0_name, image1_name, matcher, th = 0.4, \
                  scale_restore = False, save_fig = False):
     '''
     The function to return the pixel coordates of matched points on two images

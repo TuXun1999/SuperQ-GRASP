@@ -250,18 +250,18 @@ if __name__ == "__main__":
     # camera_intrinsics_dict["w"] = 1080
     # camera_intrinsics_dict["h"] = 1920
     
-    # camera_intrinsics_dict["fl_x"] = 1450.0040113315229
+    # camera_intrinsics_dict["fl_x"] = 1433.7435988377988,
     # camera_intrinsics_dict["k1"] = 0.0
     # camera_intrinsics_dict["p1"] = 0.0
-    # camera_intrinsics_dict["fl_y"] = 1447.9145807192754
+    # camera_intrinsics_dict["fl_y"] = 1438.1064292212557
     # camera_intrinsics_dict["k2"] = 0.0
     # camera_intrinsics_dict["p2"] = 0.0
-    # camera_intrinsics_dict["cx"] = 537.5683514310241
-    # camera_intrinsics_dict["cy"] = 968.3200179323903
-    # camera_intrinsics_dict["camera_angle_x"] = 0.7130009608763357
-    # camera_intrinsics_dict["camera_angle_y"] = 1.1709510004117853
+    # camera_intrinsics_dict["cx"] = 540.1934198798218
+    # camera_intrinsics_dict["cy"] = 955.7285435381777
+    # camera_intrinsics_dict["camera_angle_x"] = 0.7204090661409585
+    # camera_intrinsics_dict["camera_angle_y"] = 1.1772201404076283
 
-    nerf_dataset = "./data/chair2_real"
+    nerf_dataset = "./data/chair1_real"
     ## NOTE: Attributes for the camera on the real robot
     camera_intrinsics_dict["w"] = 640
     camera_intrinsics_dict["h"] = 480
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     ## Part I: embed pose estimation
     ######
     # Obtain the reference images & Test pose estimation
-    img_file = "pose_estimation_masked.png"
+    img_file = "pose_estimation_masked_rgb.png"
     img_dir = nerf_dataset
     images_reference_list = \
         ["/images/" + x for x in \
@@ -320,21 +320,21 @@ if __name__ == "__main__":
       ])
     camera_pose_gt = np.matmul(camera_pose_gt, \
             np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
-    # camera_pose_est, nerf_scale = \
-    #             estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
-    #                      mesh, camera_pose_gt, \
-    #                      image_type = 'outdoor', visualization = options.visualization)
-    nerf_scale = 1.85
+    camera_pose_est, nerf_scale = \
+                estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
+                         mesh, camera_pose_gt, \
+                         image_type = 'outdoor', visualization = options.visualization)
+    # nerf_scale = 2.55
     ## TODO: To test the performance of contact graspnet under different camera poses, 
     ## there is indeed a need to specify camera_pose_est at different poses
-    camera_pose_est = camera_pose_gt
+    # camera_pose_est = camera_pose_gt
 
-    a = R.from_euler('zyx', [0, 30, 0], degrees=True).as_matrix()
-    a = np.vstack((np.hstack((a, [[0], [0], [0]])), np.array([0, 0, 0, 1])))
+    # a = R.from_euler('zyx', [0, 30, 0], degrees=True).as_matrix()
+    # a = np.vstack((np.hstack((a, [[0], [0], [0]])), np.array([0, 0, 0, 1])))
 
-    # b = R.from_euler('zyx', [20, 0, 0], degrees=True).as_matrix()
-    # b = np.vstack((np.hstack((b, [[0], [0], [0]])), np.array([0, 0, 0, 1])))
-    camera_pose_est = a@camera_pose_est
+    # # b = R.from_euler('zyx', [20, 0, 0], degrees=True).as_matrix()
+    # # b = np.vstack((np.hstack((b, [[0], [0], [0]])), np.array([0, 0, 0, 1])))
+    # camera_pose_est = a@camera_pose_est
 
     ## Debug: Take a picture at the estimated camera pose
     # Construct the instant-NGP testbed
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     camera_gripper_correction = np.vstack(\
         (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.05]]))), np.array([0, 0, 0, 1])))
     gripper_pose_current = gripper_pose_current@camera_gripper_correction
-    method = "cg" 
+    method = "sq_split" 
     if method == "sq_split":
         grasp_poses_world = predict_grasp_pose_sq(gripper_pose_current, \
                             mesh, csv_filename, \

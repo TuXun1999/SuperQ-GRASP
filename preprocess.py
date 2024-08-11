@@ -60,7 +60,6 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
     camera_intrinsics_dict: dictionary of the intrinsics of the camera to use
     dist: distance of the surrounding cameras
     nerf_dataset: the directory to the stored NeRF model
-    nerf_scale: the scaled used to fit the real scene into the unit cube used in instant-NGP
 
     Output:
     Several files under the SAME directory of the stored NeRF model => for future usage

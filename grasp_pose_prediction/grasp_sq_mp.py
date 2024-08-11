@@ -136,7 +136,7 @@ def grasp_pose_eval_gripper(mesh, sq_closest, grasp_poses, gripper_attr, \
 def predict_grasp_pose_sq(camera_pose, \
                           mesh, csv_filename, \
                           normalize_stats, stored_stats_filename, \
-                            gripper_attr, args):
+                            gripper_attr, args, grasp_pose_num_th = 0):
     '''
     Input:
     camera_pose: pose of the camera
@@ -242,9 +242,9 @@ def predict_grasp_pose_sq(camera_pose, \
             grasp_pose_eval_gripper(mesh, sq_closest, grasp_poses, gripper_attr, \
                                     csv_filename, args.visualization)
         
-        if len(grasp_poses_world) != 0: 
+        if len(grasp_poses_world) >= grasp_pose_num_th: 
             # If a valid grasp pose is found
-            print("Find one valid Grasp Pose!")
+            print("Find enough valid Grasp Pose!")
             break
         else: # If no good grasp pose is found, go to the next closest superquadric
             print("Failed to Find one valid Grasp Pose!")

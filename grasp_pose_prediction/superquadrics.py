@@ -195,7 +195,7 @@ def transform_matrix_convert(grasp_poses, principal_axis):
         elif principal_axis == 1: # y is the shortest axis in length
             tran = np.matmul(np.array([
                 [1, 0, 0, 0],
-                [0, 0, 1, 0],
+                [0, 0, -1, 0],
                 [0, 1, 0, 0],
                 [0, 0, 0, 1]
             ]), tran)
