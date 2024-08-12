@@ -22,15 +22,26 @@ using Marching Primitives to split the target object into sq's
 # TODO: Add argument parser here
 def estimate_camera_pose(img_file, img_dir, images_reference_list, \
                          mesh, camera_pose_gt, \
+                         camera_gt_proj = None,
                          image_type = 'outdoor',\
                             visualization = False):
     '''
     Input:
     img_file: full name of the image file, where a custom camera is placed
     img_dir: directory of all reference images, as well as one json to record their poses
+
     images_reference_list: reference images
+    If camera_pose_gt is given, the length will be 1, and the camera pose of the frame
+    is given in camera_pose_git
+    If camera_pose_gt is not given, the length will be >= 1, and the camera poses of the
+    frames will be found in json file
+
     mesh: mesh file to use in estimating depth
-    camera_pose_gt: debugging purpose
+
+    camera_pose_gt: GT of the camera pose related to the reference image
+    If empty, the program will try to find the values in json file instead
+    camer_gt_proj: intrinsics of the camera
+
     image_type: type of the image; used in LoFTR
 
     Output:
@@ -50,24 +61,55 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
     else:
         raise ValueError("Wrong image_type is given.")
     matcher = matcher.eval().cuda()
-    print("===Closest Image==")
-    # Find the closest reference image to the the sample image w.r.t number of matches
-    image_name_reference = image_select_closest(img_file, images_reference_list, \
-                                img_dir, matcher)
-    print(image_name_reference)
-    # Determine the pixel coordinates of the point matches
-    pixel_coords_img, pixel_coords_ref = match_coords(img_dir + img_file, \
-                                                      img_dir + image_name_reference, \
-                                matcher, th = 0.5, scale_restore=True, save_fig = False)
-    ######
-    ## Part II: Estimate Camera pose of sampled image
-    ######
-    ## 2D-3D Matches by Raycasting on the Scene
-    # Obtain the directinal vectors of the selected points
-    ray_dir, camera_pose_ref, camera_proj_img, nerf_scale = \
-        dir_point_on_image(img_dir, image_name_reference, pixel_coords_ref)
+    if camera_pose_gt is None:
+        print("===Closest Image==")
+        # Find the closest reference image to the the sample image w.r.t number of matches
+        image_name_reference = image_select_closest(img_file, images_reference_list, \
+                                    img_dir, matcher)
+        print(image_name_reference)
 
-   
+        # Determine the pixel coordinates of the point matches
+        pixel_coords_img, pixel_coords_ref = match_coords(img_dir + img_file, \
+                                                        img_dir + image_name_reference, \
+                                    matcher, th = 0.5, scale_restore=True, save_fig = False)
+        ######
+        ## Part II: Estimate Camera pose of sampled image
+        ######
+        ## 2D-3D Matches by Raycasting on the Scene
+        # Obtain the directinal vectors of the selected points
+        ray_dir, camera_pose_ref, camera_proj_img, nerf_scale = \
+            dir_point_on_image(img_dir, image_name_reference, pixel_coords_ref)
+
+    else:
+        image_name_reference = images_reference_list[0]
+        # Determine the pixel coordinates of the point matches
+        pixel_coords_img, pixel_coords_ref = match_coords(img_dir + img_file, \
+                                                        img_dir + image_name_reference, \
+                                    matcher, th = 0.5, scale_restore=True, save_fig = False)
+        ######
+        ## Part II: Estimate Camera pose of sampled image
+        ######
+        # If the camera_pose_gt is already given, take it as the reference
+        camera_pose_ref = camera_pose_gt
+        # Also, read the projection 
+        camera_proj_img = camera_gt_proj
+        # nerf_scale is not used within this program in such case
+        nerf_scale = 1
+
+        # Copy the codes to obtain the ray directions
+        a, b, c = camera_proj_img[0, 0:3]
+        d, e, f = camera_proj_img[1, 0:3]
+        M = np.array([[e, -b], [-d, a]])/(a*e-b*d)
+        N = np.array([[b*f-c*e], [c*d-a*f]])/(a*e-b*d)
+        points_xy = np.matmul(M, pixel_coords_ref.T) + N
+        points_camera = np.vstack((points_xy, np.ones(points_xy.shape[1])))
+        ## Part V: Normalize the directional vectors & Convert them into world frame
+        dir_norm = np.linalg.norm(points_camera, axis=0)
+        dir_camera = points_camera / dir_norm
+        dir_world = np.matmul(camera_pose_ref, \
+                    np.vstack((dir_camera, np.zeros(dir_camera.shape[1]))))
+        ray_dir = (dir_world[0:3, :]).T
+
 
     # Obtain the distances & positions of the selected points
     pos, dist  = point_select_in_space(camera_pose_ref, ray_dir, mesh)
@@ -88,12 +130,6 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
     # If the user hopes to see the visualization
     if visualization:
         # Plot out the camera frame
-        if not camera_pose_gt is None:
-            camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
-            camera_frame.scale(20/64, [0, 0, 0])
-            camera_frame.transform(camera_pose_gt)
-            camera_frame.paint_uniform_color((0, 1, 0))
-
         camera_frame_est = o3d.geometry.TriangleMesh.create_coordinate_frame()
         camera_frame_est.scale(20/64, [0, 0, 0])
         camera_frame_est.transform(camera_pose_est)
@@ -117,9 +153,6 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
         vis= o3d.visualization.Visualizer()
         vis.create_window()
         vis.add_geometry(mesh)
-
-        if not camera_pose_gt is None:
-            vis.add_geometry(camera_frame)
         
         vis.add_geometry(camera_frame_est)
         vis.add_geometry(pcd)
@@ -129,7 +162,7 @@ def estimate_camera_pose(img_file, img_dir, images_reference_list, \
         # Close all windows
         vis.destroy_window()
 
-    return camera_pose_est, nerf_scale
+    return camera_pose_est, camera_proj_img, nerf_scale
 
 
 

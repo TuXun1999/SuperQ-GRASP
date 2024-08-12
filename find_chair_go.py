@@ -567,12 +567,19 @@ def find_chair_go(options):
             os.listdir(options.nerf_model + "/images")]# All images under foler "images"
         mesh_filename = os.path.join(options.nerf_model , "target_obj.obj")
         mesh = o3d.io.read_triangle_mesh(mesh_filename)
-        camera_pose_est, nerf_scale = \
+        camera_pose_est, camera_proj_img, nerf_scale = \
                 estimate_camera_pose("/pose_estimation_masked_rgb.png", options.nerf_model, \
                                      images_reference_list, \
                          mesh, None, \
                          image_type = 'outdoor', visualization = options.visualization)
-        
+        # NOTE: Manually correct the pose? (the estimated pose is always slightly higher
+        # than the actual one, it seems)
+        camera_pose_est += np.array(
+            [[0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, nerf_scale*0.03],
+            [0, 0, 0, 0]]
+        )
         # The reference to the file storing the previous predicted superquadric parameters
         suffix = options.nerf_model.split("/")[-1]
         stored_stats_filename = "./grasp_pose_prediction/Marching_Primitives/sq_data/" + suffix + ".p"

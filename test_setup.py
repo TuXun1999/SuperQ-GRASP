@@ -292,38 +292,19 @@ if __name__ == "__main__":
          os.listdir(nerf_dataset + "/images")]# All images under foler "images"
     mesh_filename = nerf_dataset + "/target_obj.obj"
     mesh = o3d.io.read_triangle_mesh(mesh_filename)
-    camera_pose_gt = np.array([
-        [
-          0.3288268137685253,
-          -0.47246782519371655,
-          0.8177084326161024,
-          3.4995952980181464
-        ],
-        [
-          0.9436957092008466,
-          0.13118628743264144,
-          -0.3036915646276309,
-          -1.5575937599487182
-        ],
-        [
-          0.0362123595920231,
-          0.8715298688020476,
-          0.48900342827736343,
-          1.9588267493064477
-        ],
-        [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ]
-      ])
-    camera_pose_gt = np.matmul(camera_pose_gt, \
-            np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
-    camera_pose_est, nerf_scale = \
+
+    camera_pose_est, camera_proj_img, nerf_scale = \
                 estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
-                         mesh, camera_pose_gt, \
+                         mesh, None, \
                          image_type = 'outdoor', visualization = options.visualization)
+    # NOTE: Manually correct the pose? (the estimated pose is always slightly lower
+        # than the actual one, it seems)
+    camera_pose_est = camera_pose_est + np.array(
+        [[0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, nerf_scale*0.05],
+        [0, 0, 0, 0]]
+    )
     # nerf_scale = 2.55
     ## TODO: To test the performance of contact graspnet under different camera poses, 
     ## there is indeed a need to specify camera_pose_est at different poses
@@ -353,8 +334,7 @@ if __name__ == "__main__":
     # Setting current transformation matrix.
     camera_pose_est = np.matmul(camera_pose_est, \
             np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
-    camera_pose_gt = np.matmul(camera_pose_gt, \
-            np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
+   
     testbed.set_nerf_camera_matrix(camera_pose_est[:-1])
     # Formally take a picture at that pose
     frame = testbed.render(resolution[0],resolution[1],8,linear=False)
@@ -365,8 +345,7 @@ if __name__ == "__main__":
     # Restore the frame convention (in open3d)
     camera_pose_est = np.matmul(camera_pose_est, \
             np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
-    camera_pose_gt = np.matmul(camera_pose_gt, \
-            np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
+   
     #####
     ## Part II: Embed grasp pose estimation into the pipeline
     #####
