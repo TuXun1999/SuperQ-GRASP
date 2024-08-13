@@ -25,7 +25,7 @@ model = load_model(CONFIG_PATH, WEIGHTS_PATH, DEVICE)
 print(sys.path)
 IMAGE_PATH = home_addr + "/data/" + IMAGE_NAME
 print(home_addr)
-TEXT_PROMPT = "white chair"
+TEXT_PROMPT = "blue chair"
 BOX_TRESHOLD = 0.3
 TEXT_TRESHOLD = 0.3
 
@@ -101,7 +101,7 @@ box_annotator = sv.BoxAnnotator()
 mask_annotator = sv.MaskAnnotator()
 labels = [TEXT_PROMPT + " " + str(logits[0].numpy())]
 annotated_image = mask_annotator.annotate(scene=image_source.copy(), detections=detections)
-annotated_image = box_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
+#annotated_image = box_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
 
 # matplotlib inline
 sv.plot_image(annotated_image, (16, 16))

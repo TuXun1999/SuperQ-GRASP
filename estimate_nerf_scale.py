@@ -45,7 +45,7 @@ from preprocess import instant_NGP_screenshot
 '''
 Helper function to determine the bounding box
 '''
-def bounding_box_predict(image_name, target):
+def bounding_box_predict(image_name, target, visualization=False):
     ## Predict the bounding box in the current image on the target object
     # Specify the paths to the model
     home_addr = os.path.join(os.getcwd(), "GroundingDINO")
@@ -71,7 +71,8 @@ def bounding_box_predict(image_name, target):
 
     # Display the annotated frame
     annotated_frame = annotate(image_source=image_source, boxes=boxes, logits=logits, phrases=phrases)
-    sv.plot_image(annotated_frame, (16, 16))
+    if visualization:
+        sv.plot_image(annotated_frame, (16, 16))
 
     # Return the bounding box coordinates
     h, w, _ = image_source.shape
@@ -375,7 +376,7 @@ def estimate_nerf_scale(options):
             os.listdir(options.nerf_model + "/images")]# All images under foler "images"
         mesh_filename = os.path.join(options.nerf_model , "target_obj.obj")
         mesh = o3d.io.read_triangle_mesh(mesh_filename)
-        camera_pose_est, _ = \
+        camera_pose_est, _, _ = \
                 estimate_camera_pose("/pose_estimation_masked.png", options.nerf_model, \
                                      images_reference_list, \
                          mesh, None, \
@@ -447,7 +448,7 @@ def estimate_nerf_scale(options):
         data.save(os.path.join(options.nerf_model, "pose_estimation_masked_rgb.png"))
 
 
-        camera_pose_est2, _ = \
+        camera_pose_est2, _, _ = \
                 estimate_camera_pose("/pose_estimation_masked.png", options.nerf_model, \
                                      images_reference_list, \
                          mesh, None, \
@@ -459,8 +460,8 @@ def estimate_nerf_scale(options):
                     frame_helpers.HAND_FRAME_NAME)
         ## Figure out the nerf_scale and correct the json file
         dist = np.linalg.norm(camera_pose_est2[0:3, 3] - camera_pose_est[0:3, 3])
-        gripper_dist = np.linalg.norm(odom_T_hand.get_translation()[0:3, 3] \
-                                      - odom_T_hand2.get_translation()[0:3, 3])
+        gripper_dist = np.linalg.norm(odom_T_hand.get_translation()[0:3] \
+                                      - odom_T_hand2.get_translation()[0:3])
         # In instant-NGP's world, the gripper has moved for "dist"
         nerf_scale = dist / gripper_dist
 

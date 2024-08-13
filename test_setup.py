@@ -365,11 +365,21 @@ if __name__ == "__main__":
     gripper_pose_current = camera_pose_est@np.array([[0, -1, 0, 0], [0, 0, -1, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
     
     # Correction between the hand camera & the center of robot gripper
+    gripper_z_local = (gripper_pose_current[:3, :3].T)[0:3, 2]
+
+    # The gripper's z axis should be vertical
+    angle = np.arccos(np.dot([0, 0, 1], gripper_z_local))
+    gripper_z_local_cross = np.cross(np.array([0, 0, 1]), gripper_z_local)
+   
     camera_gripper_correction = R.from_quat(\
-        [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()
+        [gripper_z_local_cross[0] * np.sin(angle/2), \
+         gripper_z_local_cross[1] * np.sin(angle/2), \
+         gripper_z_local_cross[2] * np.sin(angle/2), np.cos(angle/2)]).as_matrix()
     camera_gripper_correction = np.vstack(\
-        (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.05]]))), np.array([0, 0, 0, 1])))
+        (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
     gripper_pose_current = gripper_pose_current@camera_gripper_correction
+    gripper_pose_current[0:3, 3] -= np.array([0, 0, -0.0254*nerf_scale])
+    
     method = "sq_split" 
     if method == "sq_split":
         grasp_poses_world = predict_grasp_pose_sq(gripper_pose_current, \
@@ -542,7 +552,7 @@ if __name__ == "__main__":
         # Close all windows
         vis.destroy_window()
     # Command the robot to grasp
-
+    print(gripper_pose_current)
     print(grasp_pose_gripper)
 
     print(rel_transform_gripper)

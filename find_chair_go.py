@@ -45,7 +45,7 @@ from preprocess import instant_NGP_screenshot
 '''
 Helper function to determine the bounding box
 '''
-def bounding_box_predict(image_name, target):
+def bounding_box_predict(image_name, target, visualization=False):
     ## Predict the bounding box in the current image on the target object
     # Specify the paths to the model
     home_addr = os.path.join(os.getcwd(), "GroundingDINO")
@@ -71,7 +71,8 @@ def bounding_box_predict(image_name, target):
 
     # Display the annotated frame
     annotated_frame = annotate(image_source=image_source, boxes=boxes, logits=logits, phrases=phrases)
-    sv.plot_image(annotated_frame, (16, 16))
+    if visualization:
+        sv.plot_image(annotated_frame, (16, 16))
 
     # Return the bounding box coordinates
     h, w, _ = image_source.shape
@@ -577,7 +578,7 @@ def find_chair_go(options):
         camera_pose_est += np.array(
             [[0, 0, 0, 0],
             [0, 0, 0, 0],
-            [0, 0, 0, nerf_scale*0.03],
+            [0, 0, 0, nerf_scale*0.0],
             [0, 0, 0, 0]]
         )
         # The reference to the file storing the previous predicted superquadric parameters
@@ -595,13 +596,20 @@ def find_chair_go(options):
         gripper_attr = {"Type": "Parallel", "Length": gripper_length, \
                         "Width": gripper_width, "Thickness": gripper_thickness}
         # Correct the frame conventions in camera & gripper of SPOT
-        gripper_pose_current = camera_pose_est@np.array([[0, -1, 0, 0], [0, 0, -1, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
-        # Correction between the hand camera & the center of robot gripper
+        gripper_z_local = (gripper_pose_current[:3, :3].T)[0:3, 2]
+
+        # The gripper's z axis should be vertical
+        angle = np.arccos(np.dot([0, 0, 1], gripper_z_local))
+        gripper_z_local_cross = np.cross(np.array([0, 0, 1]), gripper_z_local)
+    
         camera_gripper_correction = R.from_quat(\
-            [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()
+            [gripper_z_local_cross[0] * np.sin(angle/2), \
+            gripper_z_local_cross[1] * np.sin(angle/2), \
+            gripper_z_local_cross[2] * np.sin(angle/2), np.cos(angle/2)]).as_matrix()
         camera_gripper_correction = np.vstack(\
-            (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.0254]]))), np.array([0, 0, 0, 1])))
+            (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
         gripper_pose_current = gripper_pose_current@camera_gripper_correction
+        gripper_pose_current[0:3, 3] -= np.array([0, 0, -0.0254*nerf_scale])
         if options.method == "sq_split":
              # Predict the grasp poses
             grasp_pose_options = \
@@ -838,34 +846,34 @@ def find_chair_go(options):
         # Command the robot to fix up the relative transformation between
         # its gripper and the body
         # Transform the desired pose from the moving body frame to the odom frame.
-        robot_state = robot_state_client.get_robot_state()
-        body_T_hand = frame_helpers.get_a_tform_b(\
-                    robot_state.kinematic_state.transforms_snapshot,
-                    frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, \
-                    frame_helpers.HAND_FRAME_NAME)
+        # robot_state = robot_state_client.get_robot_state()
+        # body_T_hand = frame_helpers.get_a_tform_b(\
+        #             robot_state.kinematic_state.transforms_snapshot,
+        #             frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, \
+        #             frame_helpers.HAND_FRAME_NAME)
 
-        # duration in seconds
-        seconds = 5.0
+        # # duration in seconds
+        # seconds = 5.0
 
-        # Create the arm command & send it (theoretically, the robot shouldn't move)
-        arm_command = RobotCommandBuilder.arm_pose_command(
-            body_T_hand.x, body_T_hand.y, body_T_hand.z, body_T_hand.rot.w, body_T_hand.rot.x,
-            body_T_hand.rot.y, body_T_hand.rot.z, \
-                frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, seconds)
-        command_client.robot_command(arm_command)
-        time.sleep(0.5)
-        # Move the robot back fro 0.5 m
-        VELOCITY_BASE_SPEED = 0.5 #[m/s]
+        # # Create the arm command & send it (theoretically, the robot shouldn't move)
+        # arm_command = RobotCommandBuilder.arm_pose_command(
+        #     body_T_hand.x, body_T_hand.y, body_T_hand.z, body_T_hand.rot.w, body_T_hand.rot.x,
+        #     body_T_hand.rot.y, body_T_hand.rot.z, \
+        #         frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, seconds)
+        # command_client.robot_command(arm_command)
+        # time.sleep(0.5)
+        # # Move the robot back fro 0.5 m
+        # VELOCITY_BASE_SPEED = 0.5 #[m/s]
 
         
-        move_cmd = RobotCommandBuilder.synchro_velocity_command(\
-            v_x=-VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
+        # move_cmd = RobotCommandBuilder.synchro_velocity_command(\
+        #     v_x=-VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
 
-        cmd_id = command_client.robot_command(command=move_cmd,
-                            end_time_secs=time.time() + 1)
+        # cmd_id = command_client.robot_command(command=move_cmd,
+        #                     end_time_secs=time.time() + 1)
     
-        # Wait until the robot reports that it is at the goal.
-        block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
+        # # Wait until the robot reports that it is at the goal.
+        # block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
         
         input("Waiting for the user to stop")
 
