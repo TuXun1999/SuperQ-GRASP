@@ -261,7 +261,7 @@ if __name__ == "__main__":
     # camera_intrinsics_dict["camera_angle_x"] = 0.7204090661409585
     # camera_intrinsics_dict["camera_angle_y"] = 1.1772201404076283
 
-    nerf_dataset = "./data/chair1_real"
+    nerf_dataset = "./data/chair2_real"
     ## NOTE: Attributes for the camera on the real robot
     camera_intrinsics_dict["w"] = 640
     camera_intrinsics_dict["h"] = 480
@@ -297,14 +297,8 @@ if __name__ == "__main__":
                 estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
                          mesh, None, \
                          image_type = 'outdoor', visualization = options.visualization)
-    # NOTE: Manually correct the pose? (the estimated pose is always slightly lower
-        # than the actual one, it seems)
-    camera_pose_est = camera_pose_est + np.array(
-        [[0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, nerf_scale*0.05],
-        [0, 0, 0, 0]]
-    )
+
+
     # nerf_scale = 2.55
     ## TODO: To test the performance of contact graspnet under different camera poses, 
     ## there is indeed a need to specify camera_pose_est at different poses
@@ -370,7 +364,7 @@ if __name__ == "__main__":
     # The gripper's z axis should be vertical
     angle = np.arccos(np.dot([0, 0, 1], gripper_z_local))
     gripper_z_local_cross = np.cross(np.array([0, 0, 1]), gripper_z_local)
-   
+    gripper_z_local_cross /= np.linalg.norm(gripper_z_local_cross)
     camera_gripper_correction = R.from_quat(\
         [gripper_z_local_cross[0] * np.sin(angle/2), \
          gripper_z_local_cross[1] * np.sin(angle/2), \
@@ -378,7 +372,15 @@ if __name__ == "__main__":
     camera_gripper_correction = np.vstack(\
         (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
     gripper_pose_current = gripper_pose_current@camera_gripper_correction
-    gripper_pose_current[0:3, 3] -= np.array([0, 0, -0.0254*nerf_scale])
+
+    # Manually set up the height of the gripper
+    gripper_pose_current[2, 3] = 8*0.0254*nerf_scale
+     # Correction between the hand camera & the center of robot gripper
+    # camera_gripper_correction = R.from_quat(\
+    #     [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()
+    # camera_gripper_correction = np.vstack(\
+    #     (np.hstack((camera_gripper_correction, np.array([[0], [0], [-0.0254]]))), np.array([0, 0, 0, 1])))
+    # gripper_pose_current = gripper_pose_current@camera_gripper_correction
     
     method = "sq_split" 
     if method == "sq_split":

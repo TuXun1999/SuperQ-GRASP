@@ -185,61 +185,66 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
         # Combine the two rotations
         rot = np.matmul(rot2, rot1)
 
-        # Translation part
-        d = np.array([[0], [dist], [0]])
-
-        # Transformation matrix at the initial pose
-        trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
-
+        
+        # Number of circles 
+        c_num = 1
         # Number of samples vertically
         h_num = 6
         # Number of samples along the circle around the object
         i_num = 24
         angle_dev_i = 2*np.pi/i_num
-        angle_dev_h = (np.pi/6)/h_num
 
-        angle_h_start = 0
         angle_i_start = 0
 
-        # Initialize all the camera view pose candidates & take the picture
-        for h in range(0, h_num): # Rotate around axis-x
-            rot_angle_h = angle_h_start + h * angle_dev_h
-            # Rotation matrix for the camera pose around x-axis
-            rot_around_x = R.from_quat([np.sin(rot_angle_h/2), 0, 0, np.cos(rot_angle_h/2)]).as_matrix()
-            camera_pose_vet = np.matmul(
-                    np.vstack(
-                        (np.hstack((rot_around_x, np.array([[0], [0], [0]]))), 
-                        np.array([0, 0, 0, 1]))),
-                    trans_initial
-                    )
-            for i in range(i_num): # Rotate around axis-z
-                rot_angle_i  = angle_i_start + i * angle_dev_i
+        for c in range(0, c_num):
+            # Translation part
+            d = np.array([[0], [dist + c], [0]])
 
-                # Rotation matrix for that camera pose
-                rot_around_z = R.from_quat([0, 0, np.sin(rot_angle_i/2), np.cos(rot_angle_i/2)]).as_matrix()
+            # Transformation matrix at the initial pose
+            trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
+        
+            # Initialize all the camera view pose candidates & take the picture
+            for h in range(0, h_num): # Rotate around axis-x
+                # rot_angle_h = angle_h_start + h * angle_dev_h
+                # # Rotation matrix for the camera pose around x-axis
+                # rot_around_x = R.from_quat([np.sin(rot_angle_h/2), 0, 0, np.cos(rot_angle_h/2)]).as_matrix()
+                camera_pose_vet = np.matmul(
+                        np.array([
+                            [1, 0, 0, 0],
+                            [0, 1, 0, 0],
+                            [0, 0, 1, 0.5 + 0.4/h_num * h],
+                            [0, 0, 0, 1]
+                        ]),
+                        trans_initial
+                        )
+                for i in range(i_num): # Rotate around axis-z
+                    rot_angle_i  = angle_i_start + i * angle_dev_i
 
-                # Obtain the camera pose
-                camera_pose = np.matmul(
-                    np.vstack(
-                        (np.hstack((rot_around_z, np.array([[0], [0], [0]]))), 
-                        np.array([0, 0, 0, 1]))),
-                    camera_pose_vet
-                    )
-                
-                # Build up the camera frame
-                camera_frame = {}
-                camera_frame["file_path"] = "./images/" + str(h) + "_" + str(i) + ".png"
-                camera_frame["transform_matrix"] = camera_pose.tolist()
-                result_dict["frames"].append(camera_frame)
+                    # Rotation matrix for that camera pose
+                    rot_around_z = R.from_quat([0, 0, np.sin(rot_angle_i/2), np.cos(rot_angle_i/2)]).as_matrix()
 
-                # Setting current transformation matrix.
-                testbed.set_nerf_camera_matrix(camera_pose[:-1])
-                # Formally take a picture at that pose
-                frame = testbed.render(resolution[0],resolution[1],8,linear=False)
+                    # Obtain the camera pose
+                    camera_pose = np.matmul(
+                        np.vstack(
+                            (np.hstack((rot_around_z, np.array([[0], [0], [0]]))), 
+                            np.array([0, 0, 0, 1]))),
+                        camera_pose_vet
+                        )
 
-                # Save the image to the folder
-                plt.imsave(images_folder + "/" + str(h) + "_" + str(i) + ".png", \
-                        frame.copy(order='C'))
+                    # Build up the camera frame
+                    camera_frame = {}
+                    camera_frame["file_path"] = "./images/" + str(c) + "_" + str(h) + "_" + str(i) + ".png"
+                    camera_frame["transform_matrix"] = camera_pose.tolist()
+                    result_dict["frames"].append(camera_frame)
+
+                    # Setting current transformation matrix.
+                    testbed.set_nerf_camera_matrix(camera_pose[:-1])
+                    # Formally take a picture at that pose
+                    frame = testbed.render(resolution[0],resolution[1],8,linear=False)
+
+                    # Save the image to the folder
+                    plt.imsave(images_folder + "/" + str(c) + "_" + str(h) + "_" + str(i) + ".png", \
+                            frame.copy(order='C'))
 
         # Dump the dict to the json file
         json.dump(result_dict, json_file, indent=4)

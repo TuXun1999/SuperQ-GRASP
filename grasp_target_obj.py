@@ -335,7 +335,7 @@ def move_gripper(grasp_pose_gripper, robot_state_client, command_client):
     block_until_arm_arrives(command_client, move_command_id, 30.0)
 
 
-def find_chair_go(options):
+def grasp_target_obj(options):
     if (options.image_source != "hand_color_image"):
         print("Currently Only Support Hand Camera!")
         return True
@@ -384,159 +384,8 @@ def find_chair_go(options):
         cmd_id = command_client.robot_command(robot_command)
 
         time.sleep(0.5)
-        ## Part 1: Take a picture & Determine the bounding box
-        # Capture one image from the hand camera
-        image_responses = image_client.get_image_from_sources(\
-            [options.image_source])
 
-        dtype = np.uint8
-
-        img = np.frombuffer(image_responses[0].shot.image.data, dtype=dtype)
-        img = cv2.imdecode(img, -1)
-
-
-        image_name = os.path.join(options.nerf_model, "initial_search.jpg")
-        cv2.imwrite(image_name, img)
-        bbox, confidence = bounding_box_predict(image_name, target)
-        if bbox is None:
-            robot.logger.info('Failed to Find any object close to your description')
-            return True
-        
-        bbox_image = get_bounding_box_image(img, bbox, confidence)
-        cv2.imwrite(os.path.join(options.nerf_model, "initial_search_bbox.jpg"), bbox_image)
-        ## Estimate the orientation of the object & Approach it
-        # Estimate the object's direction in hand frame
-        if options.distance is not None:
-            hand_tform_obj = estimate_obj_pose_hand(bbox, image_responses[0],\
-                                                options.distance)
-        else:
-            # If the user doesn't give an estimation on the distance between the object
-            # and the hand camera, use the depth sensor
-            # Send the request to obtain a visual & a depth image
-            image_depth_responses = image_client.get_image_from_sources(\
-                ["hand_depth_in_hand_color_frame", options.image_source])
-            # Visual is decoded by cv2
-            cv_visual = cv2.imdecode(np.frombuffer(\
-                image_depth_responses[1].shot.image.data, dtype=np.uint8), -1)
-            # Depth is a raw bytestream
-            cv_depth = np.frombuffer(image_depth_responses[0].shot.image.data, dtype=np.uint16)
-            cv_depth = cv_depth.reshape(image_depth_responses[0].shot.image.rows,
-                                        image_depth_responses[0].shot.image.cols)
-            
-            # Visualize the depth image
-            # cv2.applyColorMap() only supports 8-bit; 
-            # convert from 16-bit to 8-bit and do scaling
-            min_val = np.min(cv_depth)
-            max_val = np.max(cv_depth)
-            depth_range = max_val - min_val
-            depth8 = (255.0 / depth_range * (cv_depth - min_val)).astype('uint8')
-            depth8_rgb = cv2.cvtColor(depth8, cv2.COLOR_GRAY2RGB)
-            depth_color = cv2.applyColorMap(depth8_rgb, cv2.COLORMAP_JET)
-
-            # Add the two images together.
-            out = cv2.addWeighted(cv_visual, 0.5, depth_color, 0.5, 0)
-
-            # Save the image locally
-            filename = os.path.join(options.nerf_model, "initial_search_depth.png")
-            cv2.imwrite(options.filename, out)
-            # Convert the value into real-world distance & Find the average value within bbox
-            dist_avg = 0
-            dist_count = 0
-            dist_scale = image_depth_responses[0].source.depth_scale
-            for i in range(int(bbox[0]), int(bbox[2])):
-                for j in range((int(bbox[1])), int(bbox[3])):
-                    if cv_depth[i, j] != 0:
-                        dist_avg += cv_depth[i, j] / dist_scale
-                        dist_count += 1
-            
-            distance = dist_avg / dist_count
-            print("===Estimated Distance from Depth sensor===")
-            print(distance)
-
-            hand_tform_obj = estimate_obj_pose_hand(bbox, image_responses[0],\
-                                                distance)
-
-        vision_tform_obj = frame_helpers.get_a_tform_b(
-                        robot_state_client.get_robot_state(
-                                        ).kinematic_state.transforms_snapshot,
-                        frame_helpers.VISION_FRAME_NAME,
-                        frame_helpers.HAND_FRAME_NAME) * hand_tform_obj
-        print(vision_tform_obj)
-        ## Command the robot to approach the target object
-        # We now have found the target object
-        drop_position_rt_vision, heading_rt_vision = compute_stand_location_and_yaw(
-                vision_tform_obj, robot_state_client, distance_margin=1.2)
-        
-        print("====Before Movement===")
-        print(drop_position_rt_vision)
-        print(heading_rt_vision)
-        # Tell the robot to go there
-        # Limit the speed so we don't charge at the target object.
-        move_cmd = RobotCommandBuilder.synchro_se2_trajectory_point_command(
-                goal_x=drop_position_rt_vision[0],
-                goal_y=drop_position_rt_vision[1],
-                goal_heading=heading_rt_vision,
-                frame_name=frame_helpers.VISION_FRAME_NAME,
-                params=get_walking_params(0.5, 0.5))
-        
-        end_time = 15.0
-        cmd_id = command_client.robot_command(command=move_cmd,
-                                                end_time_secs=time.time() +
-                                                end_time)
-       
-        # Wait until the robot reports that it is at the goal.
-        block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
-
-        ## Postlude: Let the user decide whether to further move the robot
-        while True: 
-            approach_res = input("Do you want to further move the robot? [Y/N]")
-            if approach_res == 'N' or approach_res == 'no' or approach_res == 'n':
-                break
-            elif approach_res == 'Y' or approach_res == 'yes' or approach_res == 'y':
-                # Ask how the user would like to move the robot
-                move_option = input("Do you want to move closer or back to the original place to restart? [1/2]")
-                if move_option == "1":
-                    while True:
-                        try:
-                            more_dist = float(input("How much do you want to go further? [m]"))
-                            break
-                        except:
-                            print("Please input a float value")
-                    VELOCITY_BASE_SPEED = 0.5 #[m/s]
-                    VELOCITY_CMD_DURATION = np.abs(more_dist) / VELOCITY_BASE_SPEED
-                    move_cmd = RobotCommandBuilder.synchro_velocity_command(\
-                        v_x=np.sign(more_dist) * VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
-            
-                    end_time = 15.0
-                    cmd_id = command_client.robot_command(command=move_cmd,
-                                        end_time_secs=time.time() + VELOCITY_CMD_DURATION)
-                
-                    # Wait until the robot reports that it is at the goal.
-                    block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
-                elif move_option == "2":
-                    print("Moving back to the original place; Restart the process with new parameters")
-                    # Simply reverse the movement
-                    move_cmd = RobotCommandBuilder.synchro_se2_trajectory_point_command(
-                        goal_x=-drop_position_rt_vision[0],
-                        goal_y=-drop_position_rt_vision[1],
-                        goal_heading=-heading_rt_vision,
-                        frame_name=frame_helpers.VISION_FRAME_NAME,
-                        params=get_walking_params(0.5, 0.5))
-            
-                    end_time = 15.0
-                    cmd_id = command_client.robot_command(command=move_cmd,
-                                                            end_time_secs=time.time() +
-                                                            end_time)
-                
-                    # Wait until the robot reports that it is at the goal.
-                    block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
-                else:
-                    print("Could not understand your option. Exitting..")
-                    return False
-            else:
-                print("Please input Y/N or yes/no or y/n")
-
-        ## Part 2: Take another image & Estimate Pose
+        ## Part 2: Take an image & Estimate Pose
         depth_image_source = "hand_depth_in_hand_color_frame"
         image_responses = image_client.get_image_from_sources(\
             [options.image_source, depth_image_source])
@@ -603,7 +452,12 @@ def find_chair_go(options):
         camera_gripper_correction = np.vstack(\
             (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
         gripper_pose_current = gripper_pose_current@camera_gripper_correction
-        gripper_pose_current[0:3, 3] += np.array([0, 0, -0.0254*nerf_scale])
+
+      
+
+
+
+
         if options.method == "sq_split":
              # Predict the grasp poses
             grasp_pose_options = \
@@ -821,11 +675,19 @@ def find_chair_go(options):
             # Close all windows
             vis.destroy_window()
 
+        # NOTE: Manual correction...
+        # Manually force the height of the estimated gripper to match the measurement
+        gripper_pose_current[2, 3] = 10*0.0254*nerf_scale
+        
         # Command the robot to grasp
         print(gripper_pose_current)
         print(grasp_pose_gripper)
         grasp_pose_gripper = np.linalg.inv(gripper_pose_current)@grasp_pose_gripper
         print(grasp_pose_gripper)
+
+        
+        # NOTE: Experiments show that the distance along x-axis needs to be extended
+        grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.875
         grasp_pose_gripper[0:3, 3] = grasp_pose_gripper[0:3, 3] / nerf_scale
 
 
@@ -882,10 +744,7 @@ def main(argv):
     bosdyn.client.util.add_base_arguments(parser)
     parser.add_argument('--image-source', help='Get image from source(s), \
                         only hand camera is supported so far', default='hand_color_image')
-    parser.add_argument('--distance', \
-                        type=float, \
-                        help="Approximate Distance between the center of the \
-                            target object & the robot base")
+    
     # TODO: Instead of depending on the user, the system should automatically figure
     # out which nerf model to use
     parser.add_argument('--nerf_model', help='The directory containing the preprocessed\
@@ -900,7 +759,7 @@ def main(argv):
                         help='Which method to use in determining grasp poses')
     options = parser.parse_args(argv)
     try:
-        find_chair_go(options)
+        grasp_target_obj(options)
         return True
     except Exception as exc:  # pylint: disable=broad-except
         logger = bosdyn.client.util.get_logger()
