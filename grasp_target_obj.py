@@ -13,8 +13,9 @@ from bosdyn.client import frame_helpers
 from bosdyn.api.basic_command_pb2 import RobotCommandFeedbackStatus
 import bosdyn.api.basic_command_pb2 as basic_command_pb2
 from bosdyn.client import math_helpers
+from bosdyn.client.frame_helpers import GRAV_ALIGNED_BODY_FRAME_NAME
 from bosdyn.api import \
-    geometry_pb2
+    geometry_pb2, arm_command_pb2, robot_command_pb2, synchronized_command_pb2, trajectory_pb2
 from bosdyn.client.robot_command import \
     RobotCommandBuilder, RobotCommandClient, \
         block_until_arm_arrives, blocking_stand, blocking_selfright
@@ -309,8 +310,6 @@ def move_gripper(grasp_pose_gripper, robot_state_client, command_client):
 
     # Build the SE(3) pose of the desired hand position in the moving body frame.
     odom_T_target = odom_T_hand@grasp_pose_gripper
-    print("===Test===")
-    print(np.linalg.det(odom_T_target))
     odom_T_target = math_helpers.SE3Pose.from_matrix(odom_T_target)
     
     # duration in seconds
@@ -339,8 +338,6 @@ def grasp_target_obj(options):
     if (options.image_source != "hand_color_image"):
         print("Currently Only Support Hand Camera!")
         return True
-    ## Create an UI to take the user input & find the target object
-    target = input("What do you want to grasp?")
 
     ## Fundamental Setup of the robotic platform
     bosdyn.client.util.setup_logging(options.verbose)
@@ -378,13 +375,62 @@ def grasp_target_obj(options):
         blocking_stand(command_client, timeout_sec=10)
         robot.logger.info('Robot standing.')
 
+        if options.low_mode:
+            # If the robot needs to grasp a slightly smaller object, 
+            # lower down the platform as well
+            
+            # Move the arm along a simple trajectory.
+            x = 0.75  # a reasonable position in front of the robot
+            y1 = 0  # centered
+            z = 0  # at the body's height
+
+            # Use the same rotation as the robot's body.
+            rotation = math_helpers.Quat()
+
+            # Define times (in seconds) for each point in the trajectory.
+            t_first_point = 0  # first point starts at t = 0 for the trajectory.
+
+            # Build the points in the trajectory.
+            hand_pose1 = math_helpers.SE3Pose(x=x, y=y1, z=z, rot=rotation)
+
+            # Build the points by combining the pose and times into protos.
+            traj_point1 = trajectory_pb2.SE3TrajectoryPoint(
+                pose=hand_pose1.to_proto(), time_since_reference=seconds_to_duration(t_first_point))
+
+            # Build the trajectory proto by combining the points.
+            hand_traj = trajectory_pb2.SE3Trajectory(points=[traj_point1])
+
+            # Build the command by taking the trajectory and specifying the frame it is expressed
+            # in.
+            #
+            # In this case, we want to specify the trajectory in the body's frame, so we set the
+            # root frame name to the flat body frame.
+            arm_cartesian_command = arm_command_pb2.ArmCartesianCommand.Request(
+                pose_trajectory_in_task=hand_traj, root_frame_name=GRAV_ALIGNED_BODY_FRAME_NAME)
+
+            # Pack everything up in protos.
+            arm_command = arm_command_pb2.ArmCommand.Request(
+                arm_cartesian_command=arm_cartesian_command)
+
+            synchronized_command = synchronized_command_pb2.SynchronizedCommand.Request(
+                arm_command=arm_command)
+
+            robot_command = robot_command_pb2.RobotCommand(synchronized_command=synchronized_command)
+
+            robot.logger.info('Sending ARM trajectory command to lower down the gripper...')
+
+            # Send the trajectory to the robot.
+            cmd_id = command_client.robot_command(robot_command)
+            time.sleep(4)
         # Command the robot to open its gripper
         robot_command = RobotCommandBuilder.claw_gripper_open_fraction_command(1)
         # Send the trajectory to the robot.
         cmd_id = command_client.robot_command(robot_command)
 
-        time.sleep(0.5)
+        ## Create an UI to take the user input & find the target object
+        target = input("What do you want to grasp?")
 
+        time.sleep(1)
         ## Part 2: Take an image & Estimate Pose
         depth_image_source = "hand_depth_in_hand_color_frame"
         image_responses = image_client.get_image_from_sources(\
@@ -454,8 +500,9 @@ def grasp_target_obj(options):
         gripper_pose_current = gripper_pose_current@camera_gripper_correction
 
       
-
-
+        # NOTE: 
+        # Manually force the height of the estimated gripper to match the measurement
+        # gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
 
 
         if options.method == "sq_split":
@@ -513,26 +560,15 @@ def grasp_target_obj(options):
             # npy_data['K'] = camera_intrinsics_matrix[:, :-1]
 
             # np.save("cg_input.npy", npy_data)
-        elif options.method == "nerf_contact_graspnet":
+        elif options.method == "contact_graspnet":
             # NOTE: if  you decide to use this method, please specify 
             # the nerf snapshot (".ingp" file) and camera intrinsics
             # (In our method, they are only needed in preprocessing step)
             f = open(os.path.join(options.nerf_model, "base_cam.json"))
             camera_intrinsics_dict = json.load(f)
             f.close()
-            # Convert the frame convention back into instant-NGP format
-            temp = gripper_pose_current@np.array([[0, 0, 1, 0], [-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 0, 1]])
-            temp = temp@np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-            depth_array = instant_NGP_screenshot(\
-                options.nerf_model, "base.ingp", camera_intrinsics_dict,\
-                           temp, mode = "Depth"
-                )
-            # Convert the value into the real-world scene
-            depth_array /= nerf_scale
-
-            # Save the depth array for debugging purpose
-            # depth_array_save = depth_array * (65536/2)
-            # Image.fromarray(depth_array_save.astype('uint16')).save("./depth_test.png")
+            # Obtain the camera frame (same as the gripper frame)
+            camera_extrinsics = gripper_pose_current@np.array([[0, 0, 1, 0], [-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 0, 1]])
 
             # Read the camera attributes
             fl_x = camera_intrinsics_dict["fl_x"]
@@ -546,23 +582,19 @@ def grasp_target_obj(options):
                 [0, fl_y, cy],
                 [0, 0, 1]
             ])
-            # # Option 1: Use the depth image from instant-NGP
-            # grasp_pose_gripper = predict_grasp_pose_contact_graspnet(\
-            #             depth_array, camera_intrinsics_matrix, \
-            #             filter_grasps=False, local_regions=False,\
-            #             mode = "depth", visualization=options.visualization)
-            # Option 2: Use the mesh
+
+            # Read the vertices of the whole mesh, as well as the 
+            # convert the scene into the real-world scale
             pc_full = np.array(mesh.vertices)
             pc_full /= nerf_scale
-            # Find the point cloud in camera's frame
-            temp = temp@np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-            temp[0:3, 3] /= nerf_scale
+            camera_extrinsics[0:3, 3] /= nerf_scale
+        
 
-            pc_full = np.linalg.inv(temp)@(np.vstack((pc_full.T, np.ones(pc_full.shape[0]))))
+            pc_full = np.linalg.inv(camera_extrinsics)@(np.vstack((pc_full.T, np.ones(pc_full.shape[0]))))
             pc_full = (pc_full[0:3, :]).T
             
             pc_colors = np.array(mesh.vertex_colors)
-
+            # Predict grasp poses based on the whole mesh
             grasp_poses_cg = predict_grasp_pose_contact_graspnet(\
                         pc_full, camera_intrinsics_matrix, pc_colors=pc_colors,\
                         filter_grasps=False, local_regions=False,\
@@ -573,7 +605,7 @@ def grasp_target_obj(options):
             # (Now, they are relative transformations between frame "temp" (the camera) and 
             # predicted grasp poses)
             for i in range(grasp_poses_cg.shape[0]):
-                grasp_poses_cg[i] = temp@grasp_poses_cg[i]
+                grasp_poses_cg[i] = camera_extrinsics@grasp_poses_cg[i]
 
                 # Convert all grasp poses back into instant-NGP's scale
                 # for visualization & antipodal test purpose
@@ -586,10 +618,10 @@ def grasp_target_obj(options):
                     [1, 0, 0, 0.0584 * nerf_scale],
                     [0, 0, 0, 1]])
             
-            temp[0:3, 3] *= nerf_scale
+            camera_extrinsics[0:3, 3] *= nerf_scale
             # Evaluate the grasp poses based on antipodal & collision tests
             grasp_poses_world = grasp_pose_eval_gripper_cg(mesh, grasp_poses_cg, gripper_attr, \
-                            temp, visualization = options.visualization)
+                            camera_extrinsics, visualization = options.visualization)
         # Determine the optimal pose based on the minimum rotation
         tran_norm_min = np.Inf
         grasp_pose_gripper = np.eye(4)
@@ -605,6 +637,21 @@ def grasp_target_obj(options):
             rot2 = gripper_pose_current[:3, :3]
             tran = rot2.T@rot1
 
+            # Consider the symmetry along x-axis
+            r = R.from_matrix(tran[:3, :3])
+            r_zyx = r.as_euler('zyx', degrees=True)
+
+            # Consider the symmetry along x-axis
+            r = R.from_matrix(tran[:3, :3])
+            r_xyz = r.as_euler('xyz', degrees=True)
+
+            # Rotation along x-axis is symmetric
+            if r_xyz[0] > 90:
+                r_xyz[0] = r_xyz[0] - 180
+            elif r_xyz[0] < -90:
+                r_xyz[0] = r_xyz[0] + 180
+            tran = R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
+            
             # Find the one with the minimum rotation
             tran_norm = np.linalg.norm(tran - np.eye(3))
             if tran_norm < tran_norm_min:
@@ -675,19 +722,25 @@ def grasp_target_obj(options):
             # Close all windows
             vis.destroy_window()
 
-        # NOTE: Manual correction...
-        # Manually force the height of the estimated gripper to match the measurement
-        gripper_pose_current[2, 3] = 10*0.0254*nerf_scale
-        
         # Command the robot to grasp
         print(gripper_pose_current)
         print(grasp_pose_gripper)
         grasp_pose_gripper = np.linalg.inv(gripper_pose_current)@grasp_pose_gripper
+        # Consider the symmetry along x-axis
+        r = R.from_matrix(grasp_pose_gripper[:3, :3])
+        r_xyz = r.as_euler('xyz', degrees=True)
+
+        # Rotation along x-axis is symmetric
+        if r_xyz[0] > 90:
+            r_xyz[0] = r_xyz[0]- 180
+        elif r_xyz[0] < -90:
+            r_xyz[0] = r_xyz[0] + 180
+        grasp_pose_gripper[:3, :3]= R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
         print(grasp_pose_gripper)
 
         
         # NOTE: Experiments show that the distance along x-axis needs to be extended
-        grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.875
+        # grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.17*nerf_scale
         grasp_pose_gripper[0:3, 3] = grasp_pose_gripper[0:3, 3] / nerf_scale
 
 
@@ -753,6 +806,11 @@ def main(argv):
     # Visualization in open3d
     parser.add_argument(
         '--visualization', action = 'store_true'
+    )
+
+    # Whether to lower down the gripper at first (for slightly smaller object)
+    parser.add_argument(
+        '--lower-mode', action = 'store_true'
     )
 
     parser.add_argument('--method', default='sq_split', \

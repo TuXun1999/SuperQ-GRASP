@@ -261,7 +261,7 @@ if __name__ == "__main__":
     # camera_intrinsics_dict["camera_angle_x"] = 0.7204090661409585
     # camera_intrinsics_dict["camera_angle_y"] = 1.1772201404076283
 
-    nerf_dataset = "./data/chair2_real"
+    nerf_dataset = "./data/luggage1_real"
     ## NOTE: Attributes for the camera on the real robot
     camera_intrinsics_dict["w"] = 640
     camera_intrinsics_dict["h"] = 480
@@ -293,13 +293,38 @@ if __name__ == "__main__":
     mesh_filename = nerf_dataset + "/target_obj.obj"
     mesh = o3d.io.read_triangle_mesh(mesh_filename)
 
-    camera_pose_est, camera_proj_img, nerf_scale = \
-                estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
-                         mesh, None, \
-                         image_type = 'outdoor', visualization = options.visualization)
+    # camera_pose_est, camera_proj_img, nerf_scale = \
+    #             estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
+    #                      mesh, None, \
+    #                      image_type = 'outdoor', visualization = options.visualization)
 
-
-    # nerf_scale = 2.55
+    camera_pose_est = np.array([
+                [
+                    -0.9659258262890682,
+                    5.746937261686305e-17,
+                    -0.25881904510252063,
+                    -1.035276180410083
+                ],
+                [
+                    -0.25881904510252063,
+                    -2.1447861848524057e-16,
+                    0.9659258262890682,
+                    3.863703305156273
+                ],
+                [
+                    0.0,
+                    1.0,
+                    2.220446049250313e-16,
+                    0.5
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ])
+    nerf_scale = 2.5
     ## TODO: To test the performance of contact graspnet under different camera poses, 
     ## there is indeed a need to specify camera_pose_est at different poses
     # camera_pose_est = camera_pose_gt
@@ -374,7 +399,7 @@ if __name__ == "__main__":
     gripper_pose_current = gripper_pose_current@camera_gripper_correction
 
     # Manually set up the height of the gripper
-    gripper_pose_current[2, 3] = 8*0.0254*nerf_scale
+    #gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
      # Correction between the hand camera & the center of robot gripper
     # camera_gripper_correction = R.from_quat(\
     #     [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()
@@ -482,14 +507,36 @@ if __name__ == "__main__":
         rot1 = grasp_pose[:3,:3]
         rot2 = gripper_pose_current[:3,:3]
         tran = rot2.T@rot1
+        
+        # Consider the symmetry along x-axis
+        r = R.from_matrix(tran[:3, :3])
+        r_xyz = r.as_euler('xyz', degrees=True)
 
+        # Rotation along x-axis is symmetric
+        if r_xyz[0] > 90:
+            r_xyz[0] = r_xyz[0] - 180
+        elif r_xyz[0] < -90:
+            r_xyz[0] = r_xyz[0] + 180
+        tran = R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
         # Find the one with the minimum "distance"
         tran_norm = np.linalg.norm(tran - np.eye(3))
+
         if tran_norm < tran_norm_min:
             tran_norm_min = tran_norm
             grasp_pose_gripper = grasp_pose
 
     rel_transform_gripper = np.linalg.inv(gripper_pose_current)@grasp_pose_gripper
+    # Consider the symmetry along x-axis
+    r = R.from_matrix(rel_transform_gripper[:3, :3])
+    r_xyz = r.as_euler('xyz', degrees=True)
+    print("==Test==")
+    print(r_xyz)
+    # Rotation along x-axis is symmetric
+    if r_xyz[0] > 90:
+        r_xyz[0] = r_xyz[0] - 180
+    elif r_xyz[0] < -90:
+        r_xyz[0] = r_xyz[0] + 180
+    rel_transform_gripper[:3, :3]= R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
     ## Visualization platform
     if options.visualization:
         print("Visualize the final grasp result")
@@ -558,4 +605,4 @@ if __name__ == "__main__":
     print(grasp_pose_gripper)
 
     print(rel_transform_gripper)
-    
+    print(r_xyz)

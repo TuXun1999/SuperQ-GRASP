@@ -1,0 +1,17 @@
+Chair2:
+# NOTE: Manual correction...
+# Manually force the height of the estimated gripper to match the measurement
+gripper_pose_current[2, 3] = 10*0.0254*nerf_scale
+
+
+# NOTE: Experiments show that the distance along x-axis needs to be extended
+grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.8
+        
+        
+Chair1:
+
+gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
+
+
+# NOTE: Experiments show that the distance along x-axis needs to be extended
+grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.17*nerf_scale
