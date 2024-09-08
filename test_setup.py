@@ -261,7 +261,7 @@ if __name__ == "__main__":
     # camera_intrinsics_dict["camera_angle_x"] = 0.7204090661409585
     # camera_intrinsics_dict["camera_angle_y"] = 1.1772201404076283
 
-    nerf_dataset = "./data/luggage1_real"
+    nerf_dataset = "./data/table1_real"
     ## NOTE: Attributes for the camera on the real robot
     camera_intrinsics_dict["w"] = 640
     camera_intrinsics_dict["h"] = 480
@@ -276,7 +276,6 @@ if __name__ == "__main__":
     camera_intrinsics_dict["cy"] = 240
     camera_intrinsics_dict["camera_angle_x"] = 1.050688
     camera_intrinsics_dict["camera_angle_y"] = 0.8202161279220551
-    # nerf_dataset = "./data/chair7_pm"
     # sdf_normalize_stats, csv_filename = preprocess(camera_intrinsics_dict, options.distance, nerf_dataset, \
     #            "base_upper.ingp", options)
 
@@ -293,38 +292,38 @@ if __name__ == "__main__":
     mesh_filename = nerf_dataset + "/target_obj.obj"
     mesh = o3d.io.read_triangle_mesh(mesh_filename)
 
-    # camera_pose_est, camera_proj_img, nerf_scale = \
-    #             estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
-    #                      mesh, None, \
-    #                      image_type = 'outdoor', visualization = options.visualization)
+    camera_pose_est, camera_proj_img, nerf_scale = \
+                estimate_camera_pose("/" + img_file, img_dir, images_reference_list, \
+                         mesh, None, \
+                         image_type = 'outdoor', visualization = options.visualization)
 
-    camera_pose_est = np.array([
-                [
-                    -0.9659258262890682,
-                    5.746937261686305e-17,
-                    -0.25881904510252063,
-                    -1.035276180410083
-                ],
-                [
-                    -0.25881904510252063,
-                    -2.1447861848524057e-16,
-                    0.9659258262890682,
-                    3.863703305156273
-                ],
-                [
-                    0.0,
-                    1.0,
-                    2.220446049250313e-16,
-                    0.5
-                ],
-                [
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ]
-            ])
-    nerf_scale = 2.5
+    # camera_pose_est = np.array([
+    #             [
+    #                 -0.9659258262890682,
+    #                 5.746937261686305e-17,
+    #                 -0.25881904510252063,
+    #                 -1.035276180410083
+    #             ],
+    #             [
+    #                 -0.25881904510252063,
+    #                 -2.1447861848524057e-16,
+    #                 0.9659258262890682,
+    #                 3.863703305156273
+    #             ],
+    #             [
+    #                 0.0,
+    #                 1.0,
+    #                 2.220446049250313e-16,
+    #                 0.5
+    #             ],
+    #             [
+    #                 0.0,
+    #                 0.0,
+    #                 0.0,
+    #                 1.0
+    #             ]
+    #         ])
+    # nerf_scale = 2.5
     ## TODO: To test the performance of contact graspnet under different camera poses, 
     ## there is indeed a need to specify camera_pose_est at different poses
     # camera_pose_est = camera_pose_gt
@@ -398,8 +397,8 @@ if __name__ == "__main__":
         (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
     gripper_pose_current = gripper_pose_current@camera_gripper_correction
 
-    # Manually set up the height of the gripper
-    #gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
+    # NOTE: Manually set up the height of the gripper
+    # gripper_pose_current[2, 3] = 3.75*0.0254*nerf_scale
      # Correction between the hand camera & the center of robot gripper
     # camera_gripper_correction = R.from_quat(\
     #     [0, np.sin(np.pi/72), 0, np.cos(np.pi/72)]).as_matrix()

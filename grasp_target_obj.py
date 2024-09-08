@@ -375,17 +375,17 @@ def grasp_target_obj(options):
         blocking_stand(command_client, timeout_sec=10)
         robot.logger.info('Robot standing.')
 
-        if options.low_mode:
+        if options.lower_mode:
             # If the robot needs to grasp a slightly smaller object, 
             # lower down the platform as well
             
             # Move the arm along a simple trajectory.
-            x = 0.75  # a reasonable position in front of the robot
+            x = 0.85  # a reasonable position in front of the robot
             y1 = 0  # centered
-            z = 0  # at the body's height
+            z = 0.35 # at the body's height
 
             # Use the same rotation as the robot's body.
-            rotation = math_helpers.Quat()
+            rotation = math_helpers.Quat(w=0.9659258, x=0, y=0.258819, z=0)
 
             # Define times (in seconds) for each point in the trajectory.
             t_first_point = 0  # first point starts at t = 0 for the trajectory.
@@ -502,7 +502,7 @@ def grasp_target_obj(options):
       
         # NOTE: 
         # Manually force the height of the estimated gripper to match the measurement
-        # gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
+        gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
 
 
         if options.method == "sq_split":
@@ -515,51 +515,6 @@ def grasp_target_obj(options):
                                 mesh, csv_filename, [1.0, 0.0],\
                                 stored_stats_filename, gripper_attr, grasp_pose_options)
 
-        # elif options.method == "sq_split": TODO: split this part into a separate method
-            # Collect the depth image from the sensor
-            # Depth is a raw bytestream
-            # cv_depth = np.frombuffer(image_responses[1].shot.image.data, dtype=np.uint16)
-            # cv_depth = cv_depth.reshape(image_responses[1].shot.image.rows,
-            #                             image_responses[1].shot.image.cols)
-
-            # # Convert the value into real-world distance & Find the average value within bbox
-            # depth_scale = image_responses[1].source.depth_scale
-
-            # cv_depth_masked = cv_depth / depth_scale
-            # # Mask the depth image manually
-            # # h, w  = cv_depth.shape
-            # # cv_depth_masked = np.zeros((h, w, 1), dtype=np.uint16)
-            # # for i in range(h):
-            # #     for j in range(w):
-            # #         if mask[0][i][j]:
-            # #             cv_depth_masked[i, j] = cv_depth[i][j] / depth_scale
-
-            # # This method has to read values about SPOT camera again
-            # f = open(os.path.join(options.nerf_model, "base_cam.json"))
-            # camera_intrinsics_dict = json.load(f)
-            # f.close()
-            
-            # # Read the camera attributes
-            # fl_x = camera_intrinsics_dict["fl_x"]
-            # fl_y = camera_intrinsics_dict["fl_y"]
-            # cx = camera_intrinsics_dict["cx"]
-            # cy = camera_intrinsics_dict["cy"]
-
-            # # TODO: incorporate other distortion coefficients into concern as well
-            # camera_intrinsics_matrix = np.array([
-            #     [fl_x, 0, cx, 0],
-            #     [0, fl_y, cy, 0],
-            #     [0, 0, 1, 0]
-            # ])
-            
-            # # Save an npy file as the input to Contact GraspNet
-            # # TODO: maybe not include this method in the final version?
-            # npy_data = {}
-
-            # npy_data['depth'] = cv_depth_masked
-            # npy_data['K'] = camera_intrinsics_matrix[:, :-1]
-
-            # np.save("cg_input.npy", npy_data)
         elif options.method == "contact_graspnet":
             # NOTE: if  you decide to use this method, please specify 
             # the nerf snapshot (".ingp" file) and camera intrinsics
@@ -740,7 +695,7 @@ def grasp_target_obj(options):
 
         
         # NOTE: Experiments show that the distance along x-axis needs to be extended
-        # grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.17*nerf_scale
+        grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.38*nerf_scale
         grasp_pose_gripper[0:3, 3] = grasp_pose_gripper[0:3, 3] / nerf_scale
 
 

@@ -134,7 +134,7 @@ if __name__ == "__main__":
     for method in method_list:
         idx = 0
         avg_idx = 0
-        mean_zyx = np.array([0.0, 0.0, 0.0])
+        mean_xyz = np.array([0.0, 0.0, 0.0])
         mean_dist = 0
         mean_num = 0
         for camera_pose_est in grasp_pose_cands:
@@ -181,6 +181,8 @@ if __name__ == "__main__":
                     # convert the scene into the real-world scale
                     pc_full = np.array(mesh_points)
                     pc_full /= nerf_scale
+                    cg_idx = np.random.randint(low=0, high=pc_full.shape[0], size=100000)
+                    pc_full = pc_full[cg_idx, :]
                     camera_extrinsics[0:3, 3] /= nerf_scale
                 
 
@@ -252,6 +254,17 @@ if __name__ == "__main__":
                 rot1 = grasp_pose[:3,:3]
                 rot2 = gripper_pose_current[:3,:3]
                 tran = rot2.T@rot1
+
+                # Rotation along x-axis is symmetric
+                r = R.from_matrix(tran[:3, :3])
+                r_xyz = r.as_euler('xyz', degrees=True)
+
+                # Rotation along x-axis is symmetric
+                if r_xyz[0] > 90:
+                    r_xyz[0] = r_xyz[0] - 180
+                elif r_xyz[0] < -90:
+                    r_xyz[0] = r_xyz[0]+ 180
+                tran = R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
 
                 # Find the one with the minimum "distance"
                 tran_norm = np.linalg.norm(tran - np.eye(3))
@@ -329,24 +342,23 @@ if __name__ == "__main__":
             print("======Num of Valid Grasp Poses====")
             print(len(grasp_poses_world))
             print("======Relative Transformation=====")
-            r_zyx = r.as_euler('zyx', degrees=True)
-
+            r_xyz = r.as_euler('xyz', degrees=True)
             # Rotation along x-axis is symmetric
-            if r_zyx[2] > 90:
-                r_zyx[2] = r_zyx[2] - 180
-            elif r_zyx[2] < -90:
-                r_zyx[2] = r_zyx[2] + 180
-            print(r_zyx)
+            if r_xyz[0] > 90:
+                r_xyz[0] = r_xyz[0] - 180
+            elif r_xyz[0] < -90:
+                r_xyz[0] = r_xyz[0]+ 180
+            
             l = np.linalg.norm(rel_transform_gripper[0:3, 3])
             print(l)
-            mean_zyx += r_zyx
+            mean_xyz += r_xyz
             mean_dist += l
             mean_num += len(grasp_poses_world)
             idx += 1
             avg_idx += 1
 
         print("==== Average Results: " + method + "===")
-        print(np.mean(abs(mean_zyx/avg_idx)))
+        print(np.mean(abs(mean_xyz/avg_idx)))
         print(mean_dist/(nerf_scale * avg_idx))
         print(mean_num/idx)
         print(avg_idx)
