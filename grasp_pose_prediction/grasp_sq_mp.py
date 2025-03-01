@@ -1,9 +1,18 @@
 import numpy as np
 import os
+
+
 import sys
 sys.path.append(os.getcwd())
+pyngp_path = os.getcwd() + "/instant-ngp/build"
+sys.path.append(pyngp_path)
+import pyngp as ngp
 
+import pyrender
+import trimesh
 import open3d as o3d
+import open3d.visualization.gui as gui
+import open3d.visualization.rendering as rendering
 
 import argparse
 from grasp_pose_prediction.superquadrics import *
@@ -11,6 +20,8 @@ from utils.mesh_process import *
 from utils.image_process import *
 
 from scipy.spatial.transform import Rotation as R
+
+import matplotlib.pyplot as plt
 
 # Necessary Packages for sq parsing
 from grasp_pose_prediction.Marching_Primitives.sq_split import sq_predict_mp
@@ -51,22 +62,33 @@ def grasp_pose_eval_gripper(mesh, sq_closest, grasp_poses, gripper_attr, \
         elbow2 = np.array([0, 0, -gripper_width/2])
         tip1 = np.array([-gripper_length, 0, gripper_width/2])
         tip2 = np.array([-gripper_length, 0, -gripper_width/2])
-
+        
         # Construct the gripper
-        gripper_points = np.array([
-            center,
-            arm_end,
-            elbow1,
-            elbow2,
-            tip1,
-            tip2
-        ])
-        gripper_lines = [
-            [1, 0],
-            [2, 3],
-            [2, 4],
-            [3, 5]
-        ]
+        vis_width = 0.004
+        arm = o3d.geometry.TriangleMesh.create_cylinder(radius=vis_width, height=gripper_length)
+        arm_rot = np.array([  [0.0000000,  0.0000000,  1.0000000],
+        [0.0000000,  1.0000000,  0.0000000],
+        [-1.0000000,  0.0000000,  0.0000000]])
+        arm.rotate(arm_rot)
+        arm.translate((gripper_length/2, 0, 0))
+        hand = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_width, height=vis_width)
+        hand.translate((0, 0, -gripper_width/2))
+        finger1 = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_length, height=vis_width)
+        finger2 = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_length, height=vis_width)
+        finger_rot = np.array([  [0.0000000,  0.0000000,  -1.0000000],
+        [0.0000000,  1.0000000,  0.0000000],
+        [1.0000000,  0.0000000,  0.0000000]])
+        finger1.rotate(finger_rot)
+        finger2.rotate(finger_rot)
+        finger1.translate((-gripper_length/2, 0, 0))
+        finger2.translate((-gripper_length/2, 0, 0))
+        finger1.translate((0, 0, gripper_width/2 - gripper_length/2))
+        finger2.translate((0, 0, -gripper_width/2 - gripper_length/2))
+
+        gripper = arm
+        gripper += hand
+        gripper += finger1
+        gripper += finger2
         ## Part I: collision test preparation
         # Sample several points on the gripper
         gripper_part1 = np.linspace(arm_end, center, num_sample)
@@ -102,11 +124,9 @@ def grasp_pose_eval_gripper(mesh, sq_closest, grasp_poses, gripper_attr, \
             
             if visualization:
                 # Transform the associated points for visualization or collision testing to the correct location
-                gripper_points_vis = np.vstack((gripper_points.T, np.ones((1, gripper_points.shape[0]))))
-                gripper_points_vis = np.matmul(grasp_pose, gripper_points_vis)
-                grasp_pose_lineset = o3d.geometry.LineSet()
-                grasp_pose_lineset.points = o3d.utility.Vector3dVector(gripper_points_vis[:-1].T)
-                grasp_pose_lineset.lines = o3d.utility.Vector2iVector(gripper_lines)
+                grasp_pose_mesh = copy.deepcopy(gripper)
+                grasp_pose_mesh = grasp_pose_mesh.rotate(R=grasp_pose[:3, :3], center=(0, 0, 0))
+                grasp_pose_mesh = grasp_pose_mesh.translate(grasp_pose[0:3, 3])
                 
             # Do the necessary testing jobs
             antipodal_res, bbox = antipodal_test(mesh, grasp_pose, gripper_attr, 5, np.pi/6)
@@ -117,26 +137,63 @@ def grasp_pose_eval_gripper(mesh, sq_closest, grasp_poses, gripper_attr, \
             # Collision Test
             if collision_res:
                 if visualization:
-                    grasp_pose_lineset.paint_uniform_color((1, 0, 0))
+                    grasp_pose_mesh.paint_uniform_color((1, 0, 0))
             else: # Antipodal test
                 if antipodal_res == True:
                     grasp_poses_world.append(grasp_pose)
                     if visualization:
                         bbox_cands.append(bbox)
-                        grasp_pose_lineset.paint_uniform_color((0, 1, 0))
+                        grasp_pose_mesh.paint_uniform_color((0, 1, 0))
                 else:
                     if visualization:
-                        grasp_pose_lineset.paint_uniform_color((1, 1, 0))
+                        # Color them into yellow (no collision, but still invalid)
+                        # grasp_pose_mesh.paint_uniform_color((235/255, 197/255, 28/255))
+                        # Color them into red instead (stricter)
+                        grasp_pose_mesh.paint_uniform_color((1, 0, 0))
             if visualization:
-                grasp_cands.append(grasp_pose_lineset)
+                grasp_cands.append(grasp_pose_mesh)
     
 
     return bbox_cands, grasp_cands, grasp_poses_world
 
+def lie_algebra(gripper_pose):
+    '''
+    Convert a SE(3) pose to se(3)
+    '''
+    translation = gripper_pose[0:3, 3]
+    omega = R.from_matrix(gripper_pose[:3, :3]).as_rotvec()
+    x, y, z = omega
+    theta = np.linalg.norm(omega)
+    omega_hat = np.array([
+        [0, -z, y],
+        [z, 0, -x],
+        [-y, x, 0]
+    ])
+    coeff = 1 - (theta * np.cos(theta/2))/(2*np.sin(theta/2))
+    V_inv = np.eye(3) - (1/2) * omega_hat + (coeff / theta ** 2) * (omega_hat@omega_hat)
+    tp = V_inv@translation.flatten()
+    vw = np.hstack((tp, omega))
+    assert vw.shape[0] == 6
+    return vw
+
+def record_gripper_pose_sq(gripper_pose, sq_parameters, filename="./record.txt"):
+    '''
+    The function to record the gripper pose and the associated selected index of sq
+    from the demos
+    '''
+    f = open(filename, "a")
+    vw = lie_algebra(gripper_pose)
+    sq_xyz = sq_parameters["location"]
+    line = str(vw[0]) + ", " + str(vw[1]) + ", " + str(vw[2]) + ", " + \
+        str(vw[3]) + ", " + str(vw[4]) + ", " + str(vw[5]) + ", " + \
+        str(sq_xyz[0]) + ", " + str(sq_xyz[1]) + ", " + str(sq_xyz[2]) + "\n"
+    f.write(line)
+    f.close()
+
 def predict_grasp_pose_sq(camera_pose, \
                           mesh, csv_filename, \
                           normalize_stats, stored_stats_filename, \
-                            gripper_attr, args):
+                            gripper_attr, args, point_select = None, region_select = False):
     '''
     Input:
     camera_pose: pose of the camera
@@ -160,16 +217,10 @@ def predict_grasp_pose_sq(camera_pose, \
         print("Splitting the Target Mesh (Marching Primitives)")
          # Split the target object into several primitives using Marching Primitives
         sq_predict = sq_predict_mp(csv_filename, args)
-        # Read the attributes of the predicted sq's
-        if args.sdf_normalize: # normalize_stats is always defined if args.normalize is true
-            # Convert the primitives back to the original scale
-            # In other words, undo the normalization used by mesh2sdf
-            sq_vertices_original, sq_transformation = read_sq_mp(\
-                sq_predict, normalize_stats[0], normalize_stats[1])
-        else:
-            normalize_stats = [1.0, 0.0]
-            sq_vertices_original, sq_transformation = read_sq_mp(\
-                sq_predict, norm_scale=1.0, norm_d=0.0)
+        # The normalization stats are never used, so just set them at the default values
+        normalize_stats = [1.0, 0.0]
+        sq_vertices_original, sq_transformation = read_sq_mp(\
+            sq_predict, norm_scale=1.0, norm_d=0.0)
         if args.store:
             # If specified, store the statistics for the next use
             store_mp_parameters(stored_stats_filename, \
@@ -201,9 +252,11 @@ def predict_grasp_pose_sq(camera_pose, \
     # Convert sq_verticies_original into a numpy array
     sq_vertices = np.array(sq_vertices_original).reshape(-1, 3)
 
-    ## Find the sq associated to the selected point
-    # New method: find the sq, the center of which is closest to the camera
-    camera_t = camera_pose[0:3, 3]
+    ## Find the sq associated to the selected point / the camera
+    if point_select is None:
+        camera_t = camera_pose[0:3, 3]
+    else:
+        camera_t = point_select
     sq_centers = []
     for val in sq_transformation:
         sq_center = val["transformation"][0:3 , 3]
@@ -217,6 +270,47 @@ def predict_grasp_pose_sq(camera_pose, \
     hull_ls = o3d.geometry.LineSet.create_from_triangle_mesh(hull)
     hull_ls.paint_uniform_color((1, 0, 0))
 
+    # Optionally, let the user decide which superq region to grasp
+    if region_select:
+        if not args.visualization:
+            print("To select a region to grasp, please activate the visualization functionality")
+            return
+        else:
+            gui.Application.instance.initialize()
+
+            window = gui.Application.instance.create_window("Graspable Region", 1024, 750)
+
+            scene = gui.SceneWidget()
+            scene.scene = rendering.Open3DScene(window.renderer)
+
+            window.add_child(scene)
+
+            scene.scene.add_geometry("target object", mesh, rendering.MaterialRecord())
+
+            # Visualize the mesh and potentially graspable regions
+            hull_idx = 0
+            for sq_idx in hull_indices:
+                sq_graspable = sq_transformation[sq_idx]["points"]
+                sq_graspable_pc = o3d.geometry.PointCloud()
+                sq_graspable_pc.points = o3d.utility.Vector3dVector(sq_graspable)
+                sq_graspable_pc.paint_uniform_color((0, 0, 1))
+
+                # Append an index near each sq region
+                graspable_region_hull, _ = sq_graspable_pc.compute_convex_hull()
+                graspable_region_hull.paint_uniform_color(np.random.rand(3))
+                print(type(graspable_region_hull))
+                print(type(mesh))
+                scene.scene.add_geometry("graspable region " + str(hull_idx), graspable_region_hull, \
+                                         rendering.MaterialRecord())
+
+                scene.add_3d_label(sq_transformation[sq_idx]["transformation"][0:3, 3],\
+                                   str(hull_idx))
+                hull_idx = hull_idx + 1
+
+            gui.Application.instance.run()  # Run until user closes window
+            hull_select_idx = int(input("Which region you want to grasp?"))
+        
+
     # Find the center of sq that is closest to the camera
     hull_vertices = np.array(hull_ls.points)
     hull_vertices_dist_idx = np.argsort(np.linalg.norm(hull_vertices - camera_t, axis=1))
@@ -224,13 +318,17 @@ def predict_grasp_pose_sq(camera_pose, \
     
     # Iteratively find the closest sq
     while True:
-        idx = hull_indices[hull_vertices_dist_idx[hull_v_idx]]
+        if region_select:
+            idx = hull_indices[hull_select_idx]
+        else:
+            idx = hull_indices[hull_vertices_dist_idx[hull_v_idx]]
         sq_closest = sq_transformation[idx]
         
         if args.visualization:
             print("================================")
             print("Selected superquadric Parameters: ")
             print(sq_closest["sq_parameters"])
+            print("Index is: " + str(hull_vertices_dist_idx[hull_v_idx]))
 
         #######
         # Part II: Determine the grasp candidates on the selected sq and visualize them
@@ -245,6 +343,14 @@ def predict_grasp_pose_sq(camera_pose, \
         if len(grasp_poses_world) != 0: 
             # If a valid grasp pose is found
             print("Find one valid Grasp Pose!")
+
+            # Write the camera/gripper pose and selected index to json file (DEBUG purpose)
+            # gripper_pose = camera_pose@\
+            #     np.array([[0, 0, 1, 0],
+            #               [-1, 0, 0, 0],
+            #               [0, -1, 0, 0],
+            #               [0, 0, 0, 1]])
+            # record_gripper_pose_sq(gripper_pose, sq_closest["sq_parameters"])
             break
         else: # If no good grasp pose is found, go to the next closest superquadric
             print("Failed to Find one valid Grasp Pose!")
@@ -252,14 +358,17 @@ def predict_grasp_pose_sq(camera_pose, \
             if hull_v_idx > 20: # Too many attempts
                 print("Too many attempts...")
                 break
+            elif region_select:
+                print("No valid grasp pose on the selected region")
+                break
         
     ## Postlogue
     if args.visualization:
-        # Optionally visualize the center of the closest superquadric
+        # Optionally visualize the selected point
         ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
         ball_select.scale(1/64, [0, 0, 0])
 
-        ball_select.translate((sq_centers[idx][0], sq_centers[idx][1], sq_centers[idx][2]))
+        ball_select.translate((camera_t[0], camera_t[1], camera_t[2]))
         ball_select.paint_uniform_color((1, 0, 0))
     
         # Delete the point cloud of the associated sq (to draw a new one; avoid point overlapping)
@@ -275,11 +384,35 @@ def predict_grasp_pose_sq(camera_pose, \
         pcd_associated = o3d.geometry.PointCloud()
         pcd_associated.points = o3d.utility.Vector3dVector(sq_closest["points"])
         pcd_associated.paint_uniform_color((0, 0, 1))
+
+        # Construct the mesh
+        hull, _ = pcd_associated.compute_convex_hull()
+        hull.paint_uniform_color((154/255, 229/255, 237/255))
+        hull_ls = o3d.geometry.LineSet.create_from_triangle_mesh(hull)
+        hull_ls.paint_uniform_color((0, 0, 1))
+        pcd_associated = hull_ls
         # Plot out the fundamental frame
         frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
         frame.scale(20/64, [0, 0, 0])
 
         # Plot out the camera frame
+        fl_x = 552.0291012161067
+        fl_y = 552.0291012161067
+        cx = 320
+        cy = 240
+        camera_intrinsics = np.array([
+            [fl_x, 0, cx],
+            [0, fl_y, cy],
+            [0, 0, 1]
+        ])
+        camera_extrinsics = np.linalg.inv(camera_pose@\
+                np.array([[0, 0, 1, 0],
+                          [-1, 0, 0, 0],
+                          [0, -1, 0, 0],
+                          [0, 0, 0, 1]]))
+        camera_vis = o3d.geometry.LineSet.create_camera_visualization(\
+            640, 480, camera_intrinsics, camera_extrinsics, scale=10/64)
+        camera_vis.paint_uniform_color((1, 0, 0))
         camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
         camera_frame.scale(20/64, [0, 0, 0])
         camera_frame.transform(camera_pose@\
@@ -288,15 +421,17 @@ def predict_grasp_pose_sq(camera_pose, \
                           [0, -1, 0, 0],
                           [0, 0, 0, 1]]))
 
-
         # Create the window to display everything
         vis= o3d.visualization.Visualizer()
         vis.create_window()
+       
+        
         vis.add_geometry(mesh)
-        vis.add_geometry(pcd)
+        # vis.add_geometry(pcd)
         vis.add_geometry(pcd_associated) 
         # vis.add_geometry(sq_frame)
-        vis.add_geometry(frame)
+        # vis.add_geometry(frame)
+        vis.add_geometry(camera_vis)
         vis.add_geometry(camera_frame)
         vis.add_geometry(ball_select)
         for grasp_cand in grasp_cands:
@@ -305,24 +440,33 @@ def predict_grasp_pose_sq(camera_pose, \
             vis.add_geometry(bbox_cand)
 
         # ctr = vis.get_view_control()
-        # # TODO: remove this part
-        # x = -100
-        # y = -350
-        # ctr.rotate(x, y, xo=0.0, yo=0.0)
+        # # NOTE: the part to save a gif around the result
+        # x = 150
+        # y = -500
+        # ctr.rotate(0, y, xo=0.0, yo=0.0)
+        # ctr.rotate(x, 0, xo=0.0, yo=0.0)
         # ctr.translate(0, 0, xo=0.0, yo=0.0)
-        # ctr.scale(0.01)
-        # # Updates
-        # # vis.update_geometry(pcd)
-        # # vis.update_geometry(mesh)
-        # # vis.update_geometry(camera_frame)
-        # vis.poll_events()
-        # vis.update_renderer()
+        # ctr.scale(0.005)
+        # for i in range(200):
+        #     x = -10
+        #     y = 0
+        #     ctr.rotate(x, y, xo=0.0, yo=0.0)
+            
+        #     # Updates
+        #     # vis.update_geometry(pcd)
+        #     # vis.update_geometry(mesh)
+        #     # vis.update_geometry(camera_frame)
+        #     vis.poll_events()
+        #     vis.update_renderer()
 
-        # # Capture image
+        #     # Capture image
 
-        # vis.capture_screen_image('cameraparams2.png')
-
-        
+        #     vis.capture_screen_image('sq_split_screenshot/' + str(i) + '.png')
+        # import imageio
+        # images = []
+        # for i in range(200):
+        #     images.append(imageio.imread('sq_split_screenshot/' + str(i)+".png"))
+        # imageio.mimsave('sq-split.gif', images, fps=5, loop=0)
         vis.run()
 
         # Close all windows
@@ -348,15 +492,21 @@ if __name__ == "__main__":
         help="The dataset containing all the training images & transform.json"
     )
     parser.add_argument(
-        "--image_name",
-        help="The name of the image to use for point selection"
-    )
-    parser.add_argument(
         "--mesh_name",
-        default = "chair_upper.obj",
+        default = "target_obj.obj",
         help="The name of the mesh model to use"
     )
-
+    # The snapshot of the trained NeRF model to use
+    parser.add_argument(
+        "--snapshot", default="base.ingp", type=str,
+        help="Name of the snapshot of the NeRF model trained from instant-NGP"
+    )
+    # Arguments for camera
+    parser.add_argument(
+        '--camera', '-c',
+        help='The name of the json file specifying the parameters\
+            of the camera'
+    )
     parser.add_argument(
         '--grid_resolution', type=int, default=100,
         help='Set the resolution of the voxel grids in the order of x, y, z, e.g. 64 means 100^3.'
@@ -365,21 +515,25 @@ if __name__ == "__main__":
     parser.add_argument(
         '--level', type=float, default=2,
         help='Set watertighting thicken level. By default 2'
-    )
-    parser.add_argument(
-        '--train', action = 'store_true'
-    )
-    parser.add_argument(
-        '--store', action = 'store_true'
-    )
-    parser.add_argument(
-        '--laplacian-smooth', '-l', type=int, default=50,
-        help='Specify the laplacian smooth iterations to reduce noise'
-    )
+    ) 
 
+    parser.add_argument(
+        '--train', action = 'store_true', help="Whether to re-decompose the mesh into superquadrics"
+    )
+    parser.add_argument(
+        '--store', action = 'store_true', help="Whether to store the re-decomposed result"
+    )
+    
+    # Specify whether to select a region
+    parser.add_argument(
+        '--click', action = 'store_true', help="Whether to specify the region to grasp using a point on click"
+    )
+    parser.add_argument(
+        '--region_select', action = 'store_true', help="Whether to specify a graspable region using index"
+    )
     # Visualization in open3d
     parser.add_argument(
-        '--visualization', action = 'store_true'
+        '--visualization', action = 'store_true', help="Whether to visualize the grasp poses"
     )
     add_mp_parameters(parser)
     parser.set_defaults(normalize=False)
@@ -388,80 +542,214 @@ if __name__ == "__main__":
     parser.set_defaults(visualization=True)
 
     ######
-    # Part 0: Read the mesh & the camera poses
+    # Part 0: Read the mesh & the camera pose
     ######
     args = parser.parse_args(sys.argv[1:])
     ## The image used to specify the selected point
-    img_dir = args.nerf_dataset
-
-    # If the image is not specified, select one image by random
-    if args.image_name is None:
-        image_files = os.listdir(args.nerf_dataset + "/images")
-        image_idx = np.random.randint(0, len(image_files))
-        image_name = image_files[image_idx]
+    nerf_dataset = args.nerf_dataset
+    camera_dict = {}
+    if args.camera is not None:
+        f = open(os.path.join(args.nerf_dataset, args.camera))
+        camera_dict = json.load(f)
+        f.close()
+    # Read the camera attributes
+    fl_x = camera_dict["fl_x"]
+    fl_y = camera_dict["fl_y"]
+    cx = camera_dict["cx"]
+    cy = camera_dict["cy"]
+    if "camera_pose" in camera_dict:
+        # If the user already specifies a pose, use it
+        camera_pose = camera_dict["camera_pose"]
     else:
-        image_name = args.image_name
+        # Otherwise, find a random pose
+        dist = 1.5 * camera_dict["nerf_scale"]
+        initial_pose = np.array([
+            [0, 0, -1, dist],
+            [1, 0, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, 0, 1]
+        ])
+        angle1 = -30*np.random.rand()
+        angle2 = 360*np.random.rand()
+        rotation = R.from_euler('zyz', [0, angle1, angle2], degrees=True).as_matrix()
+        rotation = np.vstack((np.hstack((rotation, [[0], [0], [0]])), [0, 0, 0, 1]))
+        camera_pose = rotation@initial_pose
+
+    # In current case, the estimated camera pose is equal to the gt camera pose
+    camera_pose_est = camera_pose
+    ######
+    # Part 1: Select a point at the image captured at the desired pose
+    ######
+    pos = None
+    if args.click:
+        # Construct the pyrender scene
+        scene = pyrender.Scene(bg_color=np.array([0.0, 0.0, 0.0, 1.0]))
+
+        # Add the mesh
+        tm = trimesh.load(os.path.join(nerf_dataset , args.mesh_name))
+        m = pyrender.Mesh.from_trimesh(tm)
+        scene.add(m)
+
+        # Add the light source
+        light = pyrender.PointLight(color=[1.0, 1.0, 1.0], intensity=0.5)
+        light_initial = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 2*dist],
+            [0, 0, 0, 1]
+        ])
+        scene.add(light, pose=light_initial)
+
+        # Add more light sources
+
+        # Rotate around the x-axis for pi/2
+        rot1 = R.from_quat([np.sin(np.pi/4), 0, 0, np.cos(np.pi/4)]).as_matrix()
+
+        # Rotate around the z-axis for pi
+        rot2 = R.from_quat([0, 0, np.sin(np.pi/2), np.cos(np.pi/2)]).as_matrix()
+
+        # Combine the two rotations
+        rot = np.matmul(rot2, rot1)
+
+        # Translation part
+        d = np.array([[0], [2*dist], [0]])
+
+        # Transformation matrix at the initial pose
+        trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
+
+        # More lighting sources
+        for l in range(4):
+            light = pyrender.SpotLight(color=[1.0, 1.0, 1.0], intensity=80.0)
+            light_rot = R.from_quat([0, 0, np.sin(l * np.pi/4), np.cos(l * np.pi/4)]).as_matrix()
+            light_tran = np.vstack((np.hstack((light_rot, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
+            light_pose = np.matmul(light_tran, trans_initial)
+            scene.add(light, pose=light_pose)
+        # light = pyrender.light.DirectionalLight(color=[1.0, 1.0, 1.0], intensity=500, name=None)
+        # scene.add(light)
+        # Add the camera
+        camera = pyrender.IntrinsicsCamera(fl_x, fl_y, cx, cy)
+
+        # Take a picture at the desired camera pose
+        resolution = [camera_dict["w"], camera_dict["h"]]
 
 
-    img_file = "/images/" + image_name
-    print("====================")
-    print("Select from Image")
-    print(img_file)
-    ## Obtain the ray direction of the selected point in space 
-    # NOTE: Previous method to select the grasp point manually
-    # ray_dir, camera_pose, _, nerf_scale = point_select_from_image(img_dir, img_file, save_fig=True)
-    # ray_dir = ray_dir / np.linalg.norm(ray_dir)
-    _, camera_pose,nerf_scale = read_proj_from_json(img_dir, img_file)
-    ## Create files as input to other modules
-    # Specify the mesh file
-    filename=img_dir + "/" + args.mesh_name
-    
-    # Read the file as a triangular mesh
+        # Setting current transformation matrix (obey the convention in pyrender)
+        camera_pose_est = np.matmul(camera_pose_est, \
+                np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]))
+        nc = pyrender.Node(camera=camera, matrix=camera_pose_est)
+        scene.add_node(nc)
+        r = pyrender.OffscreenRenderer(resolution[0], resolution[1])
+        color, depth = r.render(scene, flags=pyrender.constants.RenderFlags.RGBA)
+
+        # Save the image to the folder
+        grasp_image_name = os.path.join(nerf_dataset, "grasp_point.png")
+        plt.imsave(grasp_image_name, \
+                    color.copy(order='C'))
+        
+        # Restore the frame convention (in open3d)
+        camera_pose_est = np.matmul(camera_pose_est, \
+                np.array([[1, 0, 0, 0], 
+                        [0, -1, 0, 0], 
+                        [0, 0, -1, 0], 
+                        [0, 0, 0, 1]]))  
+        # camera_pose_est[0:3, 3] *= 0.33
+        # camera_pose_est[0:3, 3] += 0.5
+        # Select a point on the captured image at the specified pose
+        image = cv2.imread(grasp_image_name)
+        pick_x, pick_y = get_pick_vec_manual_force(image)
+        print("================")
+        print("Clicked Point")
+        print(pick_x)
+        print(pick_y)
+
+
+        # Find the ray direction in camera frame
+        initial_guess = [0, 0]
+
+        # TODO: incorporate other distortion coefficients into concern as well
+        camera_proj = np.array([
+            [fl_x, 0, cx, 0],
+            [0, fl_y, cy, 0],
+            [0, 0, 1, 0]
+        ])
+        def equations(vars):
+            x, y = vars
+            eq = [
+                camera_proj[0][0] * x + camera_proj[0][1] * y + camera_proj[0][2] * 1 - pick_x * 1,
+                camera_proj[1][0] * x + camera_proj[1][1] * y + camera_proj[1][2] * 1 - pick_y * 1,
+            ]
+            return eq
+
+        root = fsolve(equations, initial_guess)
+        # Convert the point coorindate in world frame
+        ray_dir = np.matmul(camera_pose_est, np.array([[root[0]], [root[1]], [1], [0]]))
+        print("==Test Eq Solve")
+        print(equations(root))
+        print(root)
+        print(camera_proj@np.array([[root[0]], [root[1]], [1], [0]]))
+        # cv2.destroyAllWindows()
+
+        # Normalize the directional vector
+        print(ray_dir)
+        ray_dir = ray_dir[0:3, 0]
+        n = np.linalg.norm(ray_dir)
+        ray_dir = ray_dir / n
+        print(ray_dir)
+        ray_proj_back = np.linalg.inv(camera_pose_est)@np.array([[ray_dir[0]], [ray_dir[1]], [ray_dir[2]], [0]])
+        ray_proj_back *= n
+        print(ray_proj_back)
+        x,y,z = ray_proj_back[0][0], ray_proj_back[1][0], ray_proj_back[2][0]
+        eq = [
+                camera_proj[0][0] * x + camera_proj[0][1] * y + camera_proj[0][2] * z - pick_x * 1,
+                camera_proj[1][0] * x + camera_proj[1][1] * y + camera_proj[1][2] * z - pick_y * 1,
+            ]
+
+        print(equations([x,y]))
+    ##########
+    # Part II: Read mesh & csv file (containing splitted superquadrics)
+    # They should already be prepared from preprocess
+    ##########
+
+    # Read the mesh file
+    filename= os.path.join(nerf_dataset , args.mesh_name)
     mesh = o3d.io.read_triangle_mesh(filename)
-
-    l = args.laplacian_smooth
-    print('filter with Laplacian with ' + str(l) + ' iterations')
-    mesh = mesh.filter_smooth_laplacian(number_of_iterations=l)
-
-
-    ##########
-    # Part I: Convert the mesh into csv file
-    ##########
-
-    ## Read the csv file containing the sdf
-    if args.normalize:
-        csv_filename = img_dir + "/" + args.mesh_name[:-4] + "_normalized.csv"
-    else:
-        csv_filename = img_dir + "/" + args.mesh_name[:-4] + ".csv"
-
-    # Determine whether to correct the coordinate convention (based on whether csv is
-    # generated; if so, it means that the coordinate correction has already been done)
-    if not os.path.isfile(csv_filename):
-        # Fix up the coordinate issue 
-        mesh = coordinate_correction(mesh, filename)
-
-    # Read the csv file containing sdf value
-    if args.normalize:
-        # If the user wants a normalized model, generate the sdf anyway
-        normalize_stats = mesh2sdf_csv(filename, args)
-    else: 
-        # If normalization is not desired, the stats will always be [1.0, 0.0]
-        normalize_stats = [1.0, 0.0]
-        if os.path.isfile(csv_filename):
-            # If not, try to read the sdf in a pre-stored csv file directly
-            print("Reading SDF from csv file: ")
-            print(csv_filename)
-        else:
-            print("Converting mesh into SDF...")
-            # If the csv file has not been generated, generate one
-            normalize_stats = mesh2sdf_csv(filename, args)
-
+    # Read the csv file containing the sdf
+    csv_filename = nerf_dataset + "/" + args.mesh_name[:-4] + ".csv"
+    if args.click:
+        # Find the coordinate of the selected point in space
+        pos, dist  = point_select_in_space(camera_pose_est, ray_dir, mesh)
+        print("========================")
+        print("Selected Point in Space: ")
+        print("[%.2f, %.2f, %.2f]"%(pos[0], pos[1], pos[2]))
+        print(dist)
+        dir_test = pos - camera_pose_est[0:3, 3]
+        print(dir_test)
+        print(dir_test / np.linalg.norm(dir_test))
+    # The noramlization is never used, so just set it at the default value
+    normalize_stats = [1.0, 0.0]
     ###############
-    ## Part II: Split the mesh into several primitives & Predict Grasp poses
+    ## Part III: Predict Grasp poses
     ###############
     # The reference to the file storing the previous predicted superquadric parameters
-    suffix = img_dir.split("/")[-1]
+    suffix = nerf_dataset.split("/")[-1]
     stored_stats_filename = "./grasp_pose_prediction/Marching_Primitives/sq_data/" + suffix + ".p"
-    predict_grasp_pose_sq(camera_pose, \
+
+    # Attributes of gripper
+    nerf_scale = camera_dict["nerf_scale"]
+    gripper_width = 0.09 * nerf_scale
+    gripper_length = 0.09 * nerf_scale
+    gripper_thickness = 0.089 * nerf_scale
+    gripper_attr = {"Type": "Parallel", "Length": gripper_length, \
+                    "Width": gripper_width, "Thickness": gripper_thickness}
+        
+    # Predict grasp poses
+    gripper_pose = camera_pose_est@np.array([
+        [0, -1, 0, 0],
+        [0, 0, -1, 0],
+        [1, 0, 0, 0],
+        [0, 0, 0, 1]
+    ])
+    predict_grasp_pose_sq(gripper_pose, \
                           mesh, csv_filename, \
-                          normalize_stats, stored_stats_filename, args)
+                          normalize_stats, stored_stats_filename, gripper_attr, args, point_select=pos,\
+                            region_select=args.region_select)

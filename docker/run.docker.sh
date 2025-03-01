@@ -1,9 +1,9 @@
 # Make sure we are in the right directory.
 # the rest of the script assumes we are in robotdev/docker
-if [[ $PWD = *multi-purpose-representation ]]; then
+if [[ $PWD = *SuperQ-GRASP ]]; then
     cd docker
-elif [[ ! $PWD = *multi-purpose-representation/docker ]]; then
-    echo -e "You must be in either 'multi-purpose-representation' or the sub-directory 'docker' to run this command."
+elif [[ ! $PWD = *SuperQ-GRASP/docker ]]; then
+    echo -e "You must be in either 'SuperQ-GRASP' or the sub-directory 'docker' to run this command."
     return 1
 fi
 
@@ -37,14 +37,14 @@ done
 cd $PWD/../  # get to the root of the repository
 if ! $gui && nvidia; then
     docker run -it\
-           --volume $(pwd):/home/$USER/repo/multi-purpose-representation/\
+           --volume $(pwd):/home/$USER/repo/SuperQ-GRASP/\
            --env "TERM=xterm-256color"\
            --privileged\
            --network=host\
-           --name="MOR"\
+           --name="SuperQ-GRASP"\
            --runtime=nvidia\
            --gpus all\
-           multi-purpose-representation:$custom_tag_suffix
+           superq-grasp:$custom_tag_suffix
 else
     # Want to support running GUI applications in Docker.
     # Need to forward X11.
@@ -78,7 +78,7 @@ else
     fi
 
     docker run -it\
-           --volume $(pwd):/home/$USER/repo/multi-purpose-representation/\
+           --volume $(pwd):/home/$USER/repo/SuperQ-GRASP/\
            --env "TERM=xterm-256color"\
            --env "DISPLAY=$DISPLAY"\
            --volume /tmp/.X11-unix/:/tmp/.X11-unix:rw\
@@ -86,8 +86,8 @@ else
            --volume $XAUTH:$XAUTH\
            --privileged\
            --network=host\
-           --name="MOR"\
+           --name="SuperQ-GRASP"\
            --gpus all\
            ${runtime_nvidia}\
-           multi-purpose-representation:$custom_tag_suffix
+           superq-grasp:$custom_tag_suffix
 fi

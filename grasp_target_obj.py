@@ -43,6 +43,7 @@ from grasp_pose_prediction.grasp_sq_mp import predict_grasp_pose_sq
 from grasp_pose_prediction.grasp_contact_graspnet import \
     predict_grasp_pose_contact_graspnet, grasp_pose_eval_gripper_cg
 from preprocess import instant_NGP_screenshot
+from utils.image_process import point_select_from_custom_image
 '''
 Helper function to determine the bounding box
 '''
@@ -499,11 +500,21 @@ def grasp_target_obj(options):
             (np.hstack((camera_gripper_correction, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
         gripper_pose_current = gripper_pose_current@camera_gripper_correction
 
-      
+        ##############
         # NOTE: 
         # Manually force the height of the estimated gripper to match the measurement
-        gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
+        ##############
+        # This is the correction for chair2_real
+        # gripper_pose_current[2, 3] = 6*0.0254*nerf_scale
 
+        point_select = None
+        if options.click:
+            user_click_point, _ = point_select_from_custom_image(\
+                os.path.join(options.nerf_model, "pose_estimation.jpg"),\
+                camera_proj_img,\
+                camera_pose_est,\
+                mesh)
+            point_select = user_click_point
 
         if options.method == "sq_split":
              # Predict the grasp poses
@@ -513,7 +524,8 @@ def grasp_target_obj(options):
                         visualization=options.visualization)
             grasp_poses_world = predict_grasp_pose_sq(gripper_pose_current, \
                                 mesh, csv_filename, [1.0, 0.0],\
-                                stored_stats_filename, gripper_attr, grasp_pose_options)
+                                stored_stats_filename, gripper_attr, grasp_pose_options, \
+                                point_select=point_select, region_select=options.region_select)
 
         elif options.method == "contact_graspnet":
             # NOTE: if  you decide to use this method, please specify 
@@ -693,9 +705,16 @@ def grasp_target_obj(options):
         grasp_pose_gripper[:3, :3]= R.from_euler('xyz', r_xyz, degrees=True).as_matrix()
         print(grasp_pose_gripper)
 
-        
-        # NOTE: Experiments show that the distance along x-axis needs to be extended
-        grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.38*nerf_scale
+        ################
+        # NOTE: 
+        # Experiments show that the distance along x-axis might need to be extended or shortened. 
+        # You can correct the moving distance of the gripper here
+        ################
+        # This is the correction used for chair2_real
+        # grasp_pose_gripper[0, 3] = grasp_pose_gripper[0, 3] + 0.8
+
+
+
         grasp_pose_gripper[0:3, 3] = grasp_pose_gripper[0:3, 3] / nerf_scale
 
 
@@ -707,37 +726,38 @@ def grasp_target_obj(options):
         cmd_id = command_client.robot_command(robot_command)
 
         time.sleep(1.0)
-        # Command the robot to fix up the relative transformation between
-        # its gripper and the body
-        # Transform the desired pose from the moving body frame to the odom frame.
-        # robot_state = robot_state_client.get_robot_state()
-        # body_T_hand = frame_helpers.get_a_tform_b(\
-        #             robot_state.kinematic_state.transforms_snapshot,
-        #             frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, \
-        #             frame_helpers.HAND_FRAME_NAME)
+        # Whether to go back after the grasp
+        if options.back:
+            # Command the robot to fix up the relative transformation between
+            # its gripper and the body
+            # Transform the desired pose from the moving body frame to the odom frame.
+            robot_state = robot_state_client.get_robot_state()
+            body_T_hand = frame_helpers.get_a_tform_b(\
+                        robot_state.kinematic_state.transforms_snapshot,
+                        frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, \
+                        frame_helpers.HAND_FRAME_NAME)
 
-        # # duration in seconds
-        # seconds = 5.0
+            # duration in seconds
+            seconds = 5.0
 
-        # # Create the arm command & send it (theoretically, the robot shouldn't move)
-        # arm_command = RobotCommandBuilder.arm_pose_command(
-        #     body_T_hand.x, body_T_hand.y, body_T_hand.z, body_T_hand.rot.w, body_T_hand.rot.x,
-        #     body_T_hand.rot.y, body_T_hand.rot.z, \
-        #         frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, seconds)
-        # command_client.robot_command(arm_command)
-        # time.sleep(0.5)
-        # # Move the robot back fro 0.5 m
-        # VELOCITY_BASE_SPEED = 0.5 #[m/s]
+            # Create the arm command & send it (theoretically, the robot shouldn't move)
+            arm_command = RobotCommandBuilder.arm_pose_command(
+                body_T_hand.x, body_T_hand.y, body_T_hand.z, body_T_hand.rot.w, body_T_hand.rot.x,
+                body_T_hand.rot.y, body_T_hand.rot.z, \
+                    frame_helpers.GRAV_ALIGNED_BODY_FRAME_NAME, seconds)
+            command_client.robot_command(arm_command)
+            time.sleep(0.5)
+            # Move the robot back fro 0.5 m
+            VELOCITY_BASE_SPEED = 0.5 #[m/s]
 
-        
-        # move_cmd = RobotCommandBuilder.synchro_velocity_command(\
-        #     v_x=-VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
+            
+            move_cmd = RobotCommandBuilder.synchro_velocity_command(\
+                v_x=-VELOCITY_BASE_SPEED, v_y=0, v_rot=0)
 
-        # cmd_id = command_client.robot_command(command=move_cmd,
-        #                     end_time_secs=time.time() + 1)
-    
-        # # Wait until the robot reports that it is at the goal.
-        # block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
+            cmd_id = command_client.robot_command(command=move_cmd,
+                                end_time_secs=time.time() + 1)
+            # Wait until the robot reports that it is at the goal.
+            block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=15, verbose=True)
         
         input("Waiting for the user to stop")
 
@@ -770,6 +790,14 @@ def main(argv):
 
     parser.add_argument('--method', default='sq_split', \
                         help='Which method to use in determining grasp poses')
+    
+    # Whether to go back after the grasp
+    parser.add_argument('--back', action = 'store_true', \
+                        help="Whether to pull the chair backward for a successful grasp")
+    parser.add_argument('--click', action = 'store_true', \
+                        help="Whether to allow the user to click a point to grasp (Still under progress; not guaranted to work)")
+    parser.add_argument('--region_select', action = 'store_true',\
+                        help="Whether to select a region indexed by numbers to grasp")
     options = parser.parse_args(argv)
     try:
         grasp_target_obj(options)

@@ -1,9 +1,9 @@
 # Make sure we are in the right directory.
 # the rest of the script assumes we are in robotdev/docker
-if [[ $PWD = *multi-purpose-representation ]]; then
+if [[ $PWD = *SuperQ-GRASP ]]; then
     cd docker
-elif [[ ! $PWD = *multi-purpose-representation/docker ]]; then
-    echo -e "You must be in either 'multi-purpose-representation' or the sub-directory 'docker' to run this command."
+elif [[ ! $PWD = *SuperQ-GRASP/docker ]]; then
+    echo -e "You must be in either 'SuperQ-GRASP' or the sub-directory 'docker' to run this command."
     return 1
 fi
 
@@ -38,7 +38,7 @@ done
 # rebuild the image.
 cd $PWD/../  # get to the root of the repository
 docker build -f ./docker/Dockerfile${nvidia}\
-       -t multi-purpose-representation:$custom_tag_suffix\
+       -t superq-grasp:$custom_tag_suffix\
        --build-arg hostuser=$hostuser\
        --build-arg hostgroup=$hostgroup\
        --build-arg hostuid=$hostuid\

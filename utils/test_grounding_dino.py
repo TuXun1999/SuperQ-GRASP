@@ -14,8 +14,8 @@ import matplotlib
 import cv2
 from PIL import Image
 
-home_addr = os.path.expanduser('~') + "/repo/multi-purpose-representation/GroundingDINO"
-IMAGE_NAME = "pose_estimation.jpg"
+home_addr = os.path.expanduser('~') + "/repo/SuperQ-GRASP/GroundingDINO"
+IMAGE_NAME = "test_grounding_dino.jpg"
 CONFIG_PATH = home_addr + "/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 WEIGHTS_PATH = home_addr + "/weights/groundingdino_swint_ogc.pth"
 SAM_CHECKPOINT_PATH = home_addr + "/sam_weights/sam_vit_h_4b8939.pth"
@@ -23,7 +23,7 @@ SAM_ENCODER_VERSION = "vit_h"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = load_model(CONFIG_PATH, WEIGHTS_PATH, DEVICE)
 print(sys.path)
-IMAGE_PATH = home_addr + "/data/" + IMAGE_NAME
+IMAGE_PATH = os.path.expanduser('~') + "/repo/SuperQ-GRASP/utils/" + IMAGE_NAME
 print(home_addr)
 TEXT_PROMPT = "blue chair"
 BOX_TRESHOLD = 0.3
@@ -95,7 +95,7 @@ for i in range(h):
 print(image_masked[442, 213])
 # Save the new masked image
 data = Image.fromarray(image_masked, 'RGBA') 
-data.save('test_masked.png') 
+data.save('./utils/test_grounding_dino_result.png') 
 # Annotate image with detections
 box_annotator = sv.BoxAnnotator()
 mask_annotator = sv.MaskAnnotator()

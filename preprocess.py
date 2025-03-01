@@ -316,7 +316,7 @@ if __name__ == "__main__":
     parser.add_argument('--distance', \
                         type=float, default=1.5, \
                         help="Approximate Distance between the center of the \
-                            target object & the robot base")
+                            target object & the camera. Used in pose estimation")
     options = parser.parse_args(sys.argv[1:])
 
     nerf_dataset = options.nerf_model_directory

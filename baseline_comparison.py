@@ -47,6 +47,8 @@ if __name__ == "__main__":
                         type=float, default=1, \
                         help="The value used to scale the real scene into the\
                             scene contained in an unit cube used by instant-NGP")
+    parser.add_argument('--iterations-per-method', type=int, default=2, \
+                        help="The grasp candiates generated from  each method. 2 at minimum")
     options = parser.parse_args(sys.argv[1:])
 
 
@@ -68,7 +70,7 @@ if __name__ == "__main__":
 
 
     # Select eight poses randomly from the candidates
-    grasp_cands_num = 8
+    grasp_cands_num = (int)(options.iterations_per_method)
     h = 5
     i = 24
     grasp_cands_idx = np.random.randint((h-1)*i, size=(int)(grasp_cands_num/2))
@@ -176,6 +178,7 @@ if __name__ == "__main__":
                     [0, 0, 1]
                 ])
                 mesh_points = mesh.vertices
+                pc_full_depth = None
                 if method == "cg":
                     # Read the vertices of the whole mesh, as well as the 
                     # convert the scene into the real-world scale
@@ -191,7 +194,7 @@ if __name__ == "__main__":
                     
                     pc_colors = np.array(mesh.vertex_colors)
                     # Predict grasp poses based on the whole mesh
-                    grasp_poses_cg = predict_grasp_pose_contact_graspnet(\
+                    grasp_poses_cg, _ = predict_grasp_pose_contact_graspnet(\
                                 pc_full, camera_intrinsics_matrix, pc_colors=pc_colors,\
                                 filter_grasps=False, local_regions=False,\
                                 mode = "xyz", visualization=options.visualization)
@@ -206,10 +209,14 @@ if __name__ == "__main__":
                     # depth_array_save = depth_array * (65536/2)
                     # Image.fromarray(depth_array_save.astype('uint16')).save("./depth_test.png")
                     # Predict grasp poses on the Depth array (in real-world scale)
-                    grasp_poses_cg = predict_grasp_pose_contact_graspnet(\
+                    grasp_poses_cg, pc_full_depth = predict_grasp_pose_contact_graspnet(\
                                 depth_array, camera_intrinsics_matrix, pc_colors=None,\
                                 filter_grasps=False, local_regions=False,\
                                 mode = "depth", visualization=options.visualization)
+                    
+                    # Convert pc_full, the depth point cloud, to world frame
+                    pc_full_depth = pc_full_depth@camera_extrinsics[:3, :3].T + camera_extrinsics[0:3, 3].T
+                    pc_full_depth *= nerf_scale
                 
         
                 # Transform the relative transformation into world frame for visualization purpose
@@ -232,7 +239,7 @@ if __name__ == "__main__":
                 camera_extrinsics[0:3, 3] *= nerf_scale
                 # Evaluate the grasp poses based on antipodal & collision tests
                 grasp_poses_world = grasp_pose_eval_gripper_cg(mesh, grasp_poses_cg, gripper_attr, \
-                                camera_extrinsics, visualization = options.visualization)
+                                camera_extrinsics, visualization = options.visualization, pc_full=pc_full_depth)
 
             tran_norm_min = np.Inf
             grasp_pose_gripper = np.eye(4)
@@ -357,9 +364,9 @@ if __name__ == "__main__":
             idx += 1
             avg_idx += 1
 
-        print("==== Average Results: " + method + "===")
-        print(np.mean(abs(mean_xyz/avg_idx)))
-        print(mean_dist/(nerf_scale * avg_idx))
-        print(mean_num/idx)
-        print(avg_idx)
+        # print("==== Average Results: " + method + "===")
+        # print(np.mean(abs(mean_xyz/avg_idx)))
+        # print(mean_dist/(nerf_scale * avg_idx))
+        # print(mean_num/idx)
+        # print(avg_idx)
             

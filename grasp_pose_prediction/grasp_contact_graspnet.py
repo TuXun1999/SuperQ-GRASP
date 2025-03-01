@@ -16,7 +16,7 @@ from contact_graspnet_pytorch.checkpoints import CheckpointIO
 
 import copy
 def grasp_pose_eval_gripper_cg(mesh, grasp_poses, gripper_attr,\
-                             camera_pose, visualization = False):
+                             camera_pose, visualization = False, pc_full=None):
     '''
     The function to evaluate the predicted grasp poses on the target mesh based on 
     Contact GraspNet
@@ -47,20 +47,31 @@ def grasp_pose_eval_gripper_cg(mesh, grasp_poses, gripper_attr,\
         tip2 = np.array([-gripper_length, 0, -gripper_width/2])
 
         # Construct the gripper
-        gripper_points = np.array([
-            center,
-            arm_end,
-            elbow1,
-            elbow2,
-            tip1,
-            tip2
-        ])
-        gripper_lines = [
-            [1, 0],
-            [2, 3],
-            [2, 4],
-            [3, 5]
-        ]
+        vis_width = 0.004
+        arm = o3d.geometry.TriangleMesh.create_cylinder(radius=vis_width, height=gripper_length)
+        arm_rot = np.array([  [0.0000000,  0.0000000,  1.0000000],
+            [0.0000000,  1.0000000,  0.0000000],
+            [-1.0000000,  0.0000000,  0.0000000]])
+        arm.rotate(arm_rot)
+        arm.translate((gripper_length/2, 0, 0))
+        hand = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_width, height=vis_width)
+        hand.translate((0, 0, -gripper_width/2))
+        finger1 = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_length, height=vis_width)
+        finger2 = o3d.geometry.TriangleMesh.create_box(width=vis_width, depth=gripper_length, height=vis_width)
+        finger_rot = np.array([  [0.0000000,  0.0000000,  -1.0000000],
+            [0.0000000,  1.0000000,  0.0000000],
+            [1.0000000,  0.0000000,  0.0000000]])
+        finger1.rotate(finger_rot)
+        finger2.rotate(finger_rot)
+        finger1.translate((-gripper_length/2, 0, 0))
+        finger2.translate((-gripper_length/2, 0, 0))
+        finger1.translate((0, 0, gripper_width/2 - gripper_length/2))
+        finger2.translate((0, 0, -gripper_width/2 - gripper_length/2))
+
+        gripper = arm
+        gripper += hand
+        gripper += finger1
+        gripper += finger2
         ## Part I: collision test preparation
         # Sample several points on the gripper
         gripper_part1 = np.linspace(arm_end, center, num_sample)
@@ -98,11 +109,9 @@ def grasp_pose_eval_gripper_cg(mesh, grasp_poses, gripper_attr,\
             
             if visualization:
                 # Transform the associated points for visualization or collision testing to the correct location
-                gripper_points_vis = np.vstack((gripper_points.T, np.ones((1, gripper_points.shape[0]))))
-                gripper_points_vis = np.matmul(grasp_pose, gripper_points_vis)
-                grasp_pose_lineset = o3d.geometry.LineSet()
-                grasp_pose_lineset.points = o3d.utility.Vector3dVector(gripper_points_vis[:-1].T)
-                grasp_pose_lineset.lines = o3d.utility.Vector2iVector(gripper_lines)
+                grasp_pose_mesh = copy.deepcopy(gripper)
+                grasp_pose_mesh = grasp_pose_mesh.rotate(R=grasp_pose[:3, :3], center=(0, 0, 0))
+                grasp_pose_mesh = grasp_pose_mesh.translate(grasp_pose[0:3, 3])
                 
             # Do the necessary testing jobs
             antipodal_res, bbox = antipodal_test(mesh, grasp_pose, gripper_attr, 5, np.pi/6)
@@ -113,18 +122,21 @@ def grasp_pose_eval_gripper_cg(mesh, grasp_poses, gripper_attr,\
             # Collision Test
             if collision_res:
                 if visualization:
-                    grasp_pose_lineset.paint_uniform_color((1, 0, 0))
+                    grasp_pose_mesh.paint_uniform_color((1, 0, 0))
             else: # Antipodal test
                 if antipodal_res == True:
                     grasp_poses_world.append(grasp_pose)
                     if visualization:
                         bbox_cands.append(bbox)
-                        grasp_pose_lineset.paint_uniform_color((0, 1, 0))
+                        grasp_pose_mesh.paint_uniform_color((0, 1, 0))
                 else:
                     if visualization:
-                        grasp_pose_lineset.paint_uniform_color((1, 1, 0))
+                         # Color them into yellow (no collision, but still invalid)
+                        grasp_pose_mesh.paint_uniform_color((235/255, 197/255, 28/255))
+                        # Color them into red instead (stricter)
+                        # grasp_pose_mesh.paint_uniform_color((1, 0, 0))
             if visualization:
-                grasp_cands.append(grasp_pose_lineset)
+                grasp_cands.append(grasp_pose_mesh)
         
         # Visualize all grasp poses
         if visualization:
@@ -136,33 +148,73 @@ def grasp_pose_eval_gripper_cg(mesh, grasp_poses, gripper_attr,\
             frame.scale(20/64, [0, 0, 0])
 
             # Plot out the camera frame
+            fl_x = 552.0291012161067
+            fl_y = 552.0291012161067
+            cx = 320
+            cy = 240
+            camera_intrinsics = np.array([
+                [fl_x, 0, cx],
+                [0, fl_y, cy],
+                [0, 0, 1]
+            ])
+            camera_extrinsics = np.linalg.inv(camera_pose)
+            camera_vis = o3d.geometry.LineSet.create_camera_visualization(\
+                640, 480, camera_intrinsics, camera_extrinsics, scale=10/64)
+            camera_vis.paint_uniform_color((1, 0, 0))
             camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
             camera_frame.scale(20/64, [0, 0, 0])
             camera_frame.transform(camera_pose)
-
-            vis.add_geometry(frame)
+            # vis.add_geometry(frame)
             vis.add_geometry(camera_frame)
+            vis.add_geometry(camera_vis)
             for grasp_cand in grasp_cands:
                 vis.add_geometry(grasp_cand)
-            for bbox_cand in bbox_cands:
-                vis.add_geometry(bbox_cand)
+            # for bbox_cand in bbox_cands:
+            #     vis.add_geometry(bbox_cand)
 
+            # Also, add the partial depth point cloud if desired
+            if pc_full is not None:
+                depth_pc = o3d.geometry.PointCloud()
+                depth_pc.points = o3d.utility.Vector3dVector(pc_full)
+                depth_pc.paint_uniform_color((0, 0, 1))
+                vis.add_geometry(depth_pc)
             # TODO: remove this part
             # ctr = vis.get_view_control()
-            # x = -100
-            # y = -350
-            # ctr.rotate(x, y, xo=0.0, yo=0.0)
+            # # TODO: remove this part
+            # x = 150
+            # y = -500
+            # ctr.rotate(0, y, xo=0.0, yo=0.0)
+            # ctr.rotate(x, 0, xo=0.0, yo=0.0)
             # ctr.translate(0, 0, xo=0.0, yo=0.0)
-            # ctr.scale(0.01)
-            # # Updates
-            # # vis.update_geometry(pcd)
-            # # vis.update_geometry(mesh)
-            # # vis.update_geometry(camera_frame)
-            # vis.poll_events()
-            # vis.update_renderer()
-            # # Capture image
+            # ctr.scale(0.005)
+            # for i in range(200):
+            #     x = -10
+            #     y = 0
+            #     ctr.rotate(x, y, xo=0.0, yo=0.0)
+                
+            #     # Updates
+            #     # vis.update_geometry(pcd)
+            #     # vis.update_geometry(mesh)
+            #     # vis.update_geometry(camera_frame)
+            #     vis.poll_events()
+            #     vis.update_renderer()
 
-            # vis.capture_screen_image('cameraparams2.png')
+            #     # Capture image
+            #     if pc_full is not None:
+            #         vis.capture_screen_image('cg_depth_screenshot/' + str(i) + '.png')
+            #     else:
+            #         vis.capture_screen_image('cg_screenshot/' + str(i) + '.png')
+            # import imageio
+            # images = []
+            # if pc_full is not None:
+            #     for i in range(200):
+            #         images.append(imageio.imread('cg_depth_screenshot/' + str(i)+".png"))
+            #     imageio.mimsave('cg-depth.gif', images, fps=5, loop=0)
+            # else:
+            #     for i in range(200):
+            #         images.append(imageio.imread('cg_screenshot/' + str(i)+".png"))
+            #     imageio.mimsave('cg.gif', images, fps=5, loop=0)
+                
             vis.run()
 
             # Close all windows
@@ -246,7 +298,7 @@ def predict_grasp_pose_contact_graspnet(input_data,
         visualize_grasps(pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors)
 
     num = min(50, scores[-1].shape[0])
-    return pred_grasps_cam[-1][np.argpartition(scores[-1], -num)[-num:]]
+    return pred_grasps_cam[-1][np.argpartition(scores[-1], -num)[-num:]], pc_full
 
 
 if __name__ == "__main__":

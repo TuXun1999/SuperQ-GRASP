@@ -1,6 +1,16 @@
+.vscode
+__pycache__
 venv
 data
+GroundingDINO
 contact_graspnet_pytorch
 LoFTR
-anygrasp_input
 instant-ngp
+__pycache__
+grasp_pose_prediction/__pycache__
+grasp_pose_prediction/Marching_Primitives/__pycache__
+grasp_pose_prediction/Marching_Primitives/sq_data
+pose_estimation/__pycache__
+utils/__pycache__
+test_setup.py
+Real-world Correction.txt

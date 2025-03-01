@@ -7,7 +7,7 @@ from scipy.optimize import fsolve
 import torch
 from LoFTR.src.utils.plotting import make_matching_figure
 import matplotlib.cm as cm
-
+from utils.mesh_process import point_select_in_space
 ##########################
 ## Part I: Manually Selected Point
 ##########################
@@ -119,9 +119,12 @@ def read_proj_from_json(dataset_dir, img_name):
 
 
 def point_select_from_image(img_dir, img_file, save_fig = False):
+    '''
+    The function to select one point on one training image 
+    '''
     ## Part I: open an image
     # Open the image (human choice)
-    image = cv2.imread(img_dir + img_file)
+    image = cv2.imread(os.path.join(img_dir, img_file))
 
     # Select a point manually
     pick_x, pick_y = get_pick_vec_manual_force(image)
@@ -157,6 +160,47 @@ def point_select_from_image(img_dir, img_file, save_fig = False):
     dir_world = np.matmul(camera_pose, np.array([[root[0]], [root[1]], [root[2]], [0]]))
     cv2.destroyAllWindows()
     return dir_world[0:3, 0], camera_pose, camera_proj, nerf_scale
+
+def point_select_from_custom_image(image_name, camera_instrinsics_proj, camera_pose_est, mesh):
+    '''
+    The function to select a point on the custom image
+    '''
+    # Select a point on the captured image at the specified pose
+    image = cv2.imread(image_name)
+    pick_x, pick_y = get_pick_vec_manual_force(image)
+    print("================")
+    print("Clicked Point")
+    print(pick_x)
+    print(pick_y)
+
+    # Read the camera attributes
+    camera_proj = camera_instrinsics_proj
+    def equations(vars):
+        x, y = vars
+        eq = [
+            camera_proj[0][0] * x + camera_proj[0][1] * y + camera_proj[0][2] * 1 - pick_x * 1,
+            camera_proj[1][0] * x + camera_proj[1][1] * y + camera_proj[1][2] * 1 - pick_y * 1,
+        ]
+        return eq
+
+    root = fsolve(equations, [0, 0])
+    # Convert the point coorindate in world frame
+    ray_dir = np.matmul(camera_pose_est, np.array([[root[0]], [root[1]], [1], [0]]))
+   
+    cv2.destroyAllWindows()
+
+    # Normalize the directional vector
+
+    ray_dir = ray_dir[0:3, 0]
+    n = np.linalg.norm(ray_dir)
+    ray_dir = ray_dir / n
+
+    # Find the coordinate of the selected point in space using the 
+    # raycasting functionality in open3d
+    pos, dist  = point_select_in_space(camera_pose_est, ray_dir, mesh)
+
+    return pos, dist
+
 
 def dir_point_on_image(img_dir, img_file, pixel_coords):
     '''
@@ -194,6 +238,8 @@ def dir_point_on_image(img_dir, img_file, pixel_coords):
     dir_world = np.matmul(camera_pose, \
                 np.vstack((dir_camera, np.zeros(dir_camera.shape[1]))))
     return (dir_world[0:3, :]).T, camera_pose, camera_proj, nerf_scale
+
+
 ################################
 ## Part II:  Matched Features between two images
 ################################
