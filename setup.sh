@@ -31,7 +31,7 @@ pip install empy
 sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
 # pip install pyqt5
 pip3 install pyqt5==5.12.2
-apt-get install libsm6 libxrender1 libfontconfig1
+sudo apt-get install libsm6 libxrender1 libfontconfig1
 
 pip3 install torch torchvision torchaudio
 pip install numpy

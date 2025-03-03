@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.getcwd())
 from GroundingDINO.groundingdino.util.inference import \
     load_model, load_image, predict, annotate
 
@@ -5,7 +8,7 @@ from segment_anything import sam_model_registry, SamPredictor
 from segment_anything import SamPredictor
 import numpy as np
 
-import os
+
 import supervision as sv
 import sys
 import torch

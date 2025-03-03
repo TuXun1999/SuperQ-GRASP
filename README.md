@@ -48,7 +48,7 @@ This will create a virtual environment called "spot" with the libraries configur
 Next, we need to install these needed libraries in order:
 <ol>
 	<li>cmake (>=3.21.0): 'source bash_scripts/install_cmake.sh'. Type 'cmake --version' to validate the cmake version (>=3.21.0)</li>
-	<li>instant-NGP: 'source bash_scripts/install-ngp.sh'. Type './instant-ngp/instant-ngp --scene ./instant-ngp/data/nerf/fox' to validate the installation. You should expect to see a fox figure constructed in the window </li>
+	<li>instant-NGP: 'source bash_scripts/instant-ngp.sh'. Type './instant-ngp/instant-ngp --scene ./instant-ngp/data/nerf/fox' to validate the installation. You should expect to see a fox figure constructed in the window </li>
 	<li>GroundingDINO: 'source bash_scripts/GroundingDINO.sh'. Type 'python3 utils/test_grounding_dino.py' to download the weights and validate the effectiveness. </li>
 	<li>LoFTR: 'source bash_scripts/loftr.sh'. Then, you need to manually download the weights at "./LoFTR/weights/outdoor_ds.ckpt" </li>
 	<li>(Optional, only if you hope to see the baseline performance) Contact-GraspNet: 'source bash_scripts/contact_graspnet.sh'</li>
