@@ -9,7 +9,7 @@ pip install imageio
 pip install opencv-python-headless
 pip install pybind11
 pip install pyquaternion
-pip install scipy
+pip install scipy==1.10.0
 pip install tqdm
 
 
