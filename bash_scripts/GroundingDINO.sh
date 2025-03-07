@@ -12,7 +12,7 @@ git clone https://github.com/IDEA-Research/GroundingDINO.git
 cd GroundingDINO
 pip install -e .
 # Download the pretrained weights
-source ../venv/spot/bin/activate
+# source ../venv/spot/bin/activate
 
 mkdir weights
 cd weights

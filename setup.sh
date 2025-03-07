@@ -33,13 +33,15 @@ sudo apt-get install '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-
 pip3 install pyqt5==5.12.2
 sudo apt-get install libsm6 libxrender1 libfontconfig1
 
-pip3 install torch torchvision torchaudio
+# pip3 install torch torchvision torchaudio
+pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
 pip install numpy
 pip install open3d==0.18.0
 pip install trimesh
 
 # scikit-image
-pip install -U scikit-image
+# pip install scipy==1.10.0
+pip install -U scikit-image==0.21.0
 pip install mesh2sdf
 pip install pydot
 pip install graphviz
