@@ -142,7 +142,7 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
         store_mp_parameters(stored_stats_filename, \
                         sq_vertices_original, sq_transformation, normalize_stats)
     ## Save the generated images on the target object
-    if snapshot is not None:
+    if snapshot is not None and options.image_screenshot_nerf:
         # Path to folder to save rendered photos in.
         images_folder = os.path.join(nerf_dataset,"images")
         
@@ -303,9 +303,16 @@ if __name__ == "__main__":
     parser.add_argument(
         '--no-mesh-split', '-m', action = 'store_true', help="Disable Mesh splitting"
     )
+    parser.add_argument(
+        '--image-screenshot-nerf', '-i', action='store_true', \
+        help="(Optional) Take screenshots of the target object in NeRF to generate images at ground-truth poses.\
+            (You can also use the images to train NeRF as well as the poses, as long as the camera\
+                intrinsics are matched. Then, no need to call this option)"
+    )
     add_mp_parameters(parser)
     parser.set_defaults(normalize=False)
     parser.set_defaults(no_mesh_split=False)
+    parser.set_defaults(image_screenshot_nerf=False)
 
     # Arguments for pictures & pose estimation
     parser.add_argument(

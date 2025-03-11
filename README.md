@@ -63,7 +63,7 @@ Please access the data via Google Drive
 The data consist of one NeRF snapshot in the format of '.ingp' from instant-NGP and one json file to describe camera intrinsics. Our pipeline will automatically extract out mesh from them and complete the necessary preprocessing task. As an example, suppose we want to test our method on chair2_real. At first, preprocess the data by:
 
 '''
-python3 preprocess.py ./data/chair2_real --snapshot base.ingp --taubin-smooth 5 --camera base_cam.json --distance 4
+python3 preprocess.py ./data/chair2_real --snapshot base.ingp --taubin-smooth 5 --camera base_cam.json --distance 4 --image_screenshot_nerf
 '''
 This preprocessing only needs to be done once (70-90s). The 'distance' attribute is the radius of the semi-sphere around the object. It should be close to the distance between the robot and the object times nerf_scale. The smaller the difference is, the better the pose estimation might be. 
 
