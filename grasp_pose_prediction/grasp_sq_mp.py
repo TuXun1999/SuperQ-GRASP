@@ -4,9 +4,7 @@ import os
 
 import sys
 sys.path.append(os.getcwd())
-pyngp_path = os.getcwd() + "/instant-ngp/build"
-sys.path.append(pyngp_path)
-import pyngp as ngp
+
 
 import pyrender
 import trimesh
@@ -659,9 +657,7 @@ if __name__ == "__main__":
         pick_x, pick_y = get_pick_vec_manual_force(image)
         print("================")
         print("Clicked Point")
-        print(pick_x)
-        print(pick_y)
-
+        print([pick_x, pick_y])
 
         # Find the ray direction in camera frame
         initial_guess = [0, 0]
@@ -683,28 +679,15 @@ if __name__ == "__main__":
         root = fsolve(equations, initial_guess)
         # Convert the point coorindate in world frame
         ray_dir = np.matmul(camera_pose_est, np.array([[root[0]], [root[1]], [1], [0]]))
-        print("==Test Eq Solve")
-        print(equations(root))
-        print(root)
-        print(camera_proj@np.array([[root[0]], [root[1]], [1], [0]]))
         # cv2.destroyAllWindows()
 
         # Normalize the directional vector
-        print(ray_dir)
         ray_dir = ray_dir[0:3, 0]
         n = np.linalg.norm(ray_dir)
         ray_dir = ray_dir / n
-        print(ray_dir)
         ray_proj_back = np.linalg.inv(camera_pose_est)@np.array([[ray_dir[0]], [ray_dir[1]], [ray_dir[2]], [0]])
         ray_proj_back *= n
-        print(ray_proj_back)
-        x,y,z = ray_proj_back[0][0], ray_proj_back[1][0], ray_proj_back[2][0]
-        eq = [
-                camera_proj[0][0] * x + camera_proj[0][1] * y + camera_proj[0][2] * z - pick_x * 1,
-                camera_proj[1][0] * x + camera_proj[1][1] * y + camera_proj[1][2] * z - pick_y * 1,
-            ]
 
-        print(equations([x,y]))
     ##########
     # Part II: Read mesh & csv file (containing splitted superquadrics)
     # They should already be prepared from preprocess
@@ -721,10 +704,6 @@ if __name__ == "__main__":
         print("========================")
         print("Selected Point in Space: ")
         print("[%.2f, %.2f, %.2f]"%(pos[0], pos[1], pos[2]))
-        print(dist)
-        dir_test = pos - camera_pose_est[0:3, 3]
-        print(dir_test)
-        print(dir_test / np.linalg.norm(dir_test))
     # The noramlization is never used, so just set it at the default value
     normalize_stats = [1.0, 0.0]
     ###############
