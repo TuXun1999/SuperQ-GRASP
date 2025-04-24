@@ -555,7 +555,7 @@ def fitSuperquadricTSDF(sdf, x_init, truncation, points, roi_idx, boundingPoints
             
             # Generate new sq's with similar shapes (similar in shape but distance in parameter)
             if 0 in scale_idx:
-                eul_rot = rotm2eul(axis_0 * rotz(45))
+                eul_rot = rotm2eul(axis_0 @ rotz(45))
                 if x[1] <= 1:
                     new_xy_length = ((1 - np.sqrt(2)) * x[1] + np.sqrt(2)) * min(x[2], x[3])
                     x_rot[rot_idx, :] = np.array(\
@@ -569,7 +569,7 @@ def fitSuperquadricTSDF(sdf, x_init, truncation, points, roi_idx, boundingPoints
                          eul_rot[0], eul_rot[1], eul_rot[2], x[8], x[9], x[10]])
                 rot_idx = rot_idx + 1
             if 1 in scale_idx:
-                eul_rot = rotm2eul(axis_1 * rotz(45))
+                eul_rot = rotm2eul(axis_1 @ rotz(45))
                 if x[0] <= 1:
                     new_xy_length = ((1 - np.sqrt(2)) * x[0] + np.sqrt(2)) * min(x[3], x[4])
                     x_rot[rot_idx, :] = np.array(\
@@ -583,7 +583,7 @@ def fitSuperquadricTSDF(sdf, x_init, truncation, points, roi_idx, boundingPoints
                          eul_rot[0], eul_rot[1], eul_rot[2], x[8], x[9], x[10]])
                 rot_idx = rot_idx + 1
             if 2 in scale_idx:
-                eul_rot = rotm2eul(axis_2 * rotz(45))
+                eul_rot = rotm2eul(axis_2 @ rotz(45))
                 if x[0] <= 1:
                     new_xy_length = ((1 - np.sqrt(2)) * x[0] + np.sqrt(2)) * min(x[4], x[2])
                     x_rot[rot_idx, :] = np.array(\
@@ -745,7 +745,7 @@ def rotz(degree):
     '''
     The function to obtain the rotation matrix around z-axis
     '''
-    r = R.from_quat([0, 0, np.sin(degree * np.pi/180), np.cos(degree * np.pi/180)])
+    r = R.from_quat([0, 0, np.sin(degree * 0.5 * np.pi/180), np.cos(degree * 0.5 * np.pi/180)])
     return r.as_matrix()
 
 
