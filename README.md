@@ -1,6 +1,6 @@
 # SuperQ-GRASP
-Codes for the paper at 
-
+Codes for the paper SuperQ-GRASP at [https://arxiv.org/abs/2411.04386]
+(Under progress - 80%)
 # Preliminary - Superquadrics
 
 # Installation
@@ -136,3 +136,7 @@ The robot will stand up, approach the object prompted by the language guidance, 
 
 **NOTE** If your robot fails to grasp the object, it may probably be because of the inaccurate result from the pose estimation, instead of the flaw of the grasp pose estimation module. You can manually set up the pose by yourself from real-world measurements. For example, there is one section provided in the program for you to manually force the estimated gripper height to match the real-world measurement. 
 
+
+# TODO Lists
+1. Publish the data for evaluation
+2. Improve some comments

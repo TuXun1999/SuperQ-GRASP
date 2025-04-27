@@ -505,7 +505,7 @@ def grasp_target_obj(options):
         # Manually force the height of the estimated gripper to match the measurement
         ##############
         # This is the correction for chair2_real
-        # gripper_pose_current[2, 3] = 6*0.0254*nerf_scale
+        # gripper_pose_current[2, 3] = 12*0.0254*nerf_scale
 
         point_select = None
         if options.click:
@@ -530,7 +530,7 @@ def grasp_target_obj(options):
         elif options.method == "contact_graspnet":
             # NOTE: if  you decide to use this method, please specify 
             # the nerf snapshot (".ingp" file) and camera intrinsics
-            # (In our method, they are only needed in preprocessing step)
+            # (In our method SuperQ-GRASP, they are only needed in preprocessing step)
             f = open(os.path.join(options.nerf_model, "base_cam.json"))
             camera_intrinsics_dict = json.load(f)
             f.close()
