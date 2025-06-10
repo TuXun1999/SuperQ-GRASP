@@ -66,13 +66,17 @@ source setup.sh
 This will create a virtual environment called "spot" with all the libraries configured. 
 
 Next, we need to install these needed libraries in order:
-<ol>
-	<li>cmake (>=3.21.0): 'source bash_scripts/install_cmake.sh'. Type 'cmake --version' to validate the cmake version (>=3.21.0)</li>
-	<li>instant-NGP: 'source bash_scripts/instant-ngp.sh'. Type './instant-ngp/instant-ngp --scene ./instant-ngp/data/nerf/fox' to validate the installation. You should expect to see a 3D fox figure in the window popped out </li>
-	<li>GroundingDINO: 'source bash_scripts/GroundingDINO.sh'. Type 'python3 utils/test_grounding_dino.py' to download the weights and validate the effectiveness. </li>
-	<li>LoFTR: 'source bash_scripts/loftr.sh'. Then, you need to manually download the weights at "./LoFTR/weights/outdoor_ds.ckpt". Please follow the instructions on the official [repo](https://github.com/zju3dv/LoFTR?tab=readme-ov-file) and download the weights from their [drive](https://drive.google.com/drive/folders/1DOcOPZb3-5cWxLqn256AhwUVjBPifhuf) </li>
-	<li>(Optional, only if you hope to see the baseline performance) Contact-GraspNet: 'source bash_scripts/contact_graspnet.sh'</li>
-</ol>
+
+cmake (>=3.21.0): `source bash_scripts/install_cmake.sh`. When completed, type `cmake --version` to validate the cmake version (>=3.21.0).
+
+instant-NGP: `source bash_scripts/instant-ngp.sh`. Type `./instant-ngp/instant-ngp --scene ./instant-ngp/data/nerf/fox` to validate the installation. You should expect to see a 3D fox figure in the window popped out. 
+
+GroundingDINO: `source bash_scripts/GroundingDINO.sh`. Type `python3 utils/test_grounding_dino.py` to download the weights and validate the effectiveness.
+
+LoFTR: `source bash_scripts/loftr.sh`. Then, you need to manually download the weights at `./LoFTR/weights/outdoor_ds.ckpt`. Please follow the instructions on the official [repo](https://github.com/zju3dv/LoFTR?tab=readme-ov-file) and download the weights from their [drive](https://drive.google.com/drive/folders/1DOcOPZb3-5cWxLqn256AhwUVjBPifhuf).
+
+(Optional, only if you hope to see the baseline performance) Contact-GraspNet: `source bash_scripts/contact_graspnet.sh`
+
 
 # Experiments
 ## Step 4: Experiments on SuperQ-GRASP
