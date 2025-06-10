@@ -5,7 +5,7 @@ Codes for the paper SuperQ-GRASP at [https://arxiv.org/abs/2411.04386]
 Superquadrics are a family of primitve shapes parameterized by this formula: 
 
 $$
-\left(\left(\frac{x}{a_x}\right)^{\frac{2}{\epsilon_2}} + \left(\frac{y}{a_y}\right)^{\frac{2}{\epsilon_2}}\right)^{\frac{\epsilon_2}{\epsilon_1}} + \left(\frac{z}{a_z}\right)^{\frac{2}{\epsilon_1}} = 1
+\left(\left(\frac{x}{a_x}\right)^{\frac{2}{\varepsilon_2}} + \left(\frac{y}{a_y}\right)^{\frac{2}{\varepsilon_2}}\right)^{\frac{\varepsilon_2}{\varepsilon_1}} + \left(\frac{z}{a_z}\right)^{\frac{2}{\varepsilon_1}} = 1
 $$
 
 
@@ -27,21 +27,21 @@ Then, follow this [guidance](https://docs.nvidia.com/datacenter/cloud-native/con
 ## Step 2: Docker Image Build & Container Construction
 To build the docker image, clone this repo. Under the root directory of the repo, type
 
-'''
+```
 source docker/build.noetic.sh
-'''
+```
 
 Type 'docker images' to validate the existence of the docker image. Then, to construct a docker container, type
 
-'''
+```
 source docker/run.noetic.sh
-'''
+```
 
 Now, you should expect to see one container called "SuperQ-GRASP" by typing
 
-'''
+```
 docker ps -a
-'''
+```
 
 
 **The following operations are ALL in the docker container.**
@@ -51,17 +51,18 @@ Go inside the docker container, and go tothe repo directory
 
 (Optional but recommended) Follow the steps in VScode. 
 
-'''
+```
 cd /repo/SuperQ-GRASP
-'''
+```
 
 Type 'nvidia-smi' to validate that you have gpu access. 
 
 Configure the virtual python environment by typing
 
-'''
+```
 source setup.sh
-'''
+```
+
 This will create a virtual environment called "spot" with all the libraries configured. 
 
 Next, we need to install these needed libraries in order:
@@ -79,9 +80,9 @@ Please download the [dataset](https://drive.google.com/drive/folders/1pNuiV0qzxn
 
 The dataset of one object consists of one NeRF snapshot in the format of '.ingp' from instant-NGP and one json file to describe camera intrinsics. Our pipeline will automatically extract out mesh from them and complete the necessary preprocessing task. As an example, suppose we want to test our method on chair2_real. At first, preprocess the data by:
 
-'''
+```
 python3 preprocess.py ./data/chair2_real --snapshot base.ingp --taubin-smooth 5 --camera base_cam.json --distance 1.5 --image-screenshot-nerf
-'''
+```
 
 This preprocessing only needs to be done once (70-90s).The explanation for several hyperparameters:
 <ol> 
@@ -94,43 +95,43 @@ This preprocessing only needs to be done once (70-90s).The explanation for sever
 
 And then, you could test the grasp pose evaluation module (SuperQ-GRASP) by calling
 
-'''
+```
 python3 grasp_pose_prediction/grasp_sq_mp.py ./data/chair2_real --camera base_cam.json --click --visualization
-'''
+```
 
 It will produce an image for the user to select the graspable region. Then, grasp poses will be generated around the graspable region.
 
 Alternatively, you could select the specific superquadric to generate valid grasp poses. Just type
 
-'''
+```
 python3 grasp_pose_prediction/grasp_sq_mp.py ./data/chair2_real --camera base_cam.json --region_select --visualization
-
-'''
+```
 
 Follow the prompts and valid grasp poses can be obtained on the selected region. 
 
 (Optional) If you have installed Contact-GraspNet as well, you could test the two baseline methods by comparing them against the proposal method. At first, there is one small environmental setup issue to be fixed. Go to 
 
-'''
+```
 cd contact_graspnet_pytorch/contact_graspnet_pytorch
-'''
+```
 
 Open 'visualization_utils_o3d.py' and replace line 13 with
 
-'''
+```
 import contact_graspnet_pytorch.mesh_utils as mesh_utils
-'''
+```
+
 Then, go to the root directory of the repo
 
-'''
+```
 cd ../../
-'''
+```
 
 Type
 
-'''
+```
 python3 baseline_comparison.py ./data/chair2_real --distance 4 --nerf-scale 2.5 --iterations-per-method 2 --visualization
-'''
+```
 
 'iterations-per-method' will define the number of iterations to evaluate grasp poses at the specified camera pose for each of the method. If visualization flag is activated, then within one iteration, you should expect to see: 
 <ul>
@@ -144,17 +145,17 @@ If you want to see complete quantitative results, please check line 142 in 'base
 
 At first, within the virtual environment, please access the SPOT robot by 
 
-'''
+```
 source spot_connect.sh
-'''
+```
 
 Now, still take Chair2_real as an example. If you hope to grasp the chair in front of the robot:
 
 You could type 
 
-'''
+```
 python3 grasp_target_obj.py 192.168.80.3 --nerf_model ./data/chair2_real --visualization
-'''
+```
 
 The robot will stand up, approach the object prompted by the language guidance, and complete the entire grasping process. 
 
