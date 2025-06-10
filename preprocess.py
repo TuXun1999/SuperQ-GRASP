@@ -161,7 +161,7 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
             print("(The value used to scale the real scene into the scene contained in an unit cube used by instant-NGP)")
             sys.exit(1)
         result_dict["nerf_scale"] = camera_intrinsics_dict["nerf_scale"]
-
+        nerf_scale = camera_intrinsics_dict["nerf_scale"]
         resolution = [camera_intrinsics_dict["w"], camera_intrinsics_dict["h"]]
         fov_x = camera_intrinsics_dict["camera_angle_x"] * 180/np.pi
         fov_y = camera_intrinsics_dict["camera_angle_y"] * 180/np.pi
@@ -186,8 +186,7 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
         rot = np.matmul(rot2, rot1)
 
         
-        # Number of circles 
-        c_num = 1
+
         # Number of samples vertically
         h_num = 6
         angle_h_start = 0
@@ -198,61 +197,53 @@ def preprocess(camera_intrinsics_dict, dist, nerf_dataset, snapshot, options):
 
         angle_i_start = 0
 
-        for c in range(0, c_num):
-            # Translation part
-            d = np.array([[0], [dist + c], [0]])
 
-            # Transformation matrix at the initial pose
-            trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
-        
-            # Initialize all the camera view pose candidates & take the picture
-            for h in range(0, h_num): # Rotate around axis-x
-                rot_angle_h = angle_h_start + h * angle_dev_h
-                # Rotation matrix for the camera pose around x-axis
-                rot_around_x = R.from_quat([np.sin(rot_angle_h/2), 0, 0, np.cos(rot_angle_h/2)]).as_matrix()
-                camera_pose_vet = np.matmul(
-                        np.vstack(
-                            (np.hstack((rot_around_x, np.array([[0], [0], [0]]))), 
-                            np.array([0, 0, 0, 1]))),
-                        trans_initial
-                        )
-                # camera_pose_vet = np.matmul(
-                #         np.array([
-                #             [1, 0, 0, 0],
-                #             [0, 1, 0, 0],
-                #             [0, 0, 1, 0.5 + 0.4/h_num * h],
-                #             [0, 0, 0, 1]
-                #         ]),
-                #         trans_initial
-                #         )
-                for i in range(i_num): # Rotate around axis-z
-                    rot_angle_i  = angle_i_start + i * angle_dev_i
+        # Translation part
+        d = np.array([[0], [dist * nerf_scale], [0]])
 
-                    # Rotation matrix for that camera pose
-                    rot_around_z = R.from_quat([0, 0, np.sin(rot_angle_i/2), np.cos(rot_angle_i/2)]).as_matrix()
+        # Transformation matrix at the initial pose
+        trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
+    
+        # Initialize all the camera view pose candidates & take the picture
+        for h in range(0, h_num): # Rotate around axis-x
+            rot_angle_h = angle_h_start + h * angle_dev_h
+            # Rotation matrix for the camera pose around x-axis
+            rot_around_x = R.from_quat([np.sin(rot_angle_h/2), 0, 0, np.cos(rot_angle_h/2)]).as_matrix()
+            camera_pose_vet = np.matmul(
+                    np.vstack(
+                        (np.hstack((rot_around_x, np.array([[0], [0], [0]]))), 
+                        np.array([0, 0, 0, 1]))),
+                    trans_initial
+                    )
+            
+            for i in range(i_num): # Rotate around axis-z
+                rot_angle_i  = angle_i_start + i * angle_dev_i
 
-                    # Obtain the camera pose
-                    camera_pose = np.matmul(
-                        np.vstack(
-                            (np.hstack((rot_around_z, np.array([[0], [0], [0]]))), 
-                            np.array([0, 0, 0, 1]))),
-                        camera_pose_vet
-                        )
+                # Rotation matrix for that camera pose
+                rot_around_z = R.from_quat([0, 0, np.sin(rot_angle_i/2), np.cos(rot_angle_i/2)]).as_matrix()
 
-                    # Build up the camera frame
-                    camera_frame = {}
-                    camera_frame["file_path"] = "./images/" + str(c) + "_" + str(h) + "_" + str(i) + ".png"
-                    camera_frame["transform_matrix"] = camera_pose.tolist()
-                    result_dict["frames"].append(camera_frame)
+                # Obtain the camera pose
+                camera_pose = np.matmul(
+                    np.vstack(
+                        (np.hstack((rot_around_z, np.array([[0], [0], [0]]))), 
+                        np.array([0, 0, 0, 1]))),
+                    camera_pose_vet
+                    )
 
-                    # Setting current transformation matrix.
-                    testbed.set_nerf_camera_matrix(camera_pose[:-1])
-                    # Formally take a picture at that pose
-                    frame = testbed.render(resolution[0],resolution[1],8,linear=False)
+                # Build up the camera frame
+                camera_frame = {}
+                camera_frame["file_path"] = "./images/" + str(h) + "_" + str(i) + ".png"
+                camera_frame["transform_matrix"] = camera_pose.tolist()
+                result_dict["frames"].append(camera_frame)
 
-                    # Save the image to the folder
-                    plt.imsave(images_folder + "/" + str(c) + "_" + str(h) + "_" + str(i) + ".png", \
-                            frame.copy(order='C'))
+                # Setting current transformation matrix.
+                testbed.set_nerf_camera_matrix(camera_pose[:-1])
+                # Formally take a picture at that pose
+                frame = testbed.render(resolution[0],resolution[1],8,linear=False)
+
+                # Save the image to the folder
+                plt.imsave(images_folder + "_" + str(h) + "_" + str(i) + ".png", \
+                        frame.copy(order='C'))
 
         # Dump the dict to the json file
         json.dump(result_dict, json_file, indent=4)
@@ -323,7 +314,7 @@ if __name__ == "__main__":
     parser.add_argument('--distance', \
                         type=float, default=1.5, \
                         help="Approximate Distance between the center of the \
-                            target object & the camera. Used in pose estimation")
+                            target object & the camera in real-world. Used in pose estimation")
     options = parser.parse_args(sys.argv[1:])
 
     nerf_dataset = options.nerf_model_directory

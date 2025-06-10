@@ -278,7 +278,7 @@ def predict_grasp_pose_contact_graspnet(input_data,
                 skip_border_objects=skip_border_objects, z_range=z_range)
         pc_colors = np.ones((pc_full.shape[0], 3))
         if pc_full.shape[0] == 0:
-            return pc_full # Failed to generate depth data...
+            return [], pc_full # Failed to generate depth data...
     elif mode == "xyz":
         pc_full = input_data
         pc_colors = pc_colors *255

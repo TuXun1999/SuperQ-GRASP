@@ -41,8 +41,8 @@ if __name__ == "__main__":
 
     # Arguments for pictures
     parser.add_argument('--distance', \
-                        type=float, default=1.5, \
-                        help="Radius of the semi-sphere")
+                        type=float, default=4.0, \
+                        help="Radius of the semi-sphere (in nerf scale)")
     parser.add_argument('--nerf-scale', \
                         type=float, default=1, \
                         help="The value used to scale the real scene into the\
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     trans_initial2 = copy.deepcopy(trans_initial)
     trans_initial2[0:3, 3] *= 1.5
 
-    # Select the grasp poses on the semi-sphere (camera poses)
+    # The candidates for the gripper poses (camera poses)
     grasp_pose_cands = []
     # Inner semi-sphere
     for idx in range(grasp_cands_idx.shape[0]):
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         mean_xyz = np.array([0.0, 0.0, 0.0])
         mean_dist = 0
         mean_num = 0
-        for camera_pose_est in grasp_pose_cands:
+        for camera_pose_est in grasp_pose_cands[:1]: # NOTE: Change it to grasp_pose_cands for a complete review
             # Correct the frame conventions in camera & gripper of SPOT
             gripper_pose_current = camera_pose_est@np.array([[0, -1, 0, 0], [0, 0, -1, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
             
@@ -348,7 +348,7 @@ if __name__ == "__main__":
             print("======Valid Results at Pose " + str(idx) + " for " + method)
             print("======Num of Valid Grasp Poses====")
             print(len(grasp_poses_world))
-            print("======Relative Transformation=====")
+            print("======Relative Distance =====")
             r_xyz = r.as_euler('xyz', degrees=True)
             # Rotation along x-axis is symmetric
             if r_xyz[0] > 90:
@@ -364,9 +364,9 @@ if __name__ == "__main__":
             idx += 1
             avg_idx += 1
 
-        # print("==== Average Results: " + method + "===")
-        # print(np.mean(abs(mean_xyz/avg_idx)))
-        # print(mean_dist/(nerf_scale * avg_idx))
-        # print(mean_num/idx)
-        # print(avg_idx)
+        print("==== Average Results: " + method + "===")
+        print(np.mean(abs(mean_xyz/avg_idx)))
+        print(mean_dist/(nerf_scale * avg_idx))
+        print(mean_num/idx)
+        print(avg_idx)
             
